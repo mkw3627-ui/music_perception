@@ -1,0 +1,29 @@
+# music_perception 示例：在 N.E.K.O 插件配置里设置 [music_perception]。
+# 修改目录前先确认自己有权访问这些文件。
+[music_perception]
+# 快速启发式（无模型）；需要可选的 Essentia 才能用学习式情绪模型。
+emotion_mode = "fast"
+# 完整歌曲允许的最大时长（秒），60..1800。超出会返回错误，不会截断。
+max_seconds = 900
+# 分析每个段落的长度，4..60 秒
+segment_seconds = 10
+# 示例路径请替换为自己明确授权的音乐目录，默认可以使用 ~/Music 等。
+allowed_roots = []
+# Essentia 模型权重目录，仅在 emotion_mode="essentia" 时使用。
+emotion_models_dir = ""
+
+# 更高的阈值使自动监听更保守，但可能遗漏安静/纯器乐。
+music_gate_score = 0.24
+
+# 经音乐分类确认后，每20秒自动交给分析，不等歌曲结束。
+live_segment_seconds = 20
+
+# 首次在插件面板选择低 tiny / 中 base / 高 small / 极高 large-v3-turbo。用户选择保存于持久数据目录，且优先于此旧配置默认值。
+# 支持中、日、英语音转写候选；歌声伴奏较重时可能识别错误。
+# 首次识别需下载权重，不影响音乐持续监听；原始 PCM 在独立进程本地处理。
+lyrics_model = "base"
+lyrics_device = "cpu"   # 面板可选 cpu / cuda（NVIDIA）；兼容旧版 auto
+lyrics_cpu_threads = 2
+
+# 模型权重下载失败时使用公共镜像重试（只下载公开权重）。
+lyrics_mirror_fallback = true

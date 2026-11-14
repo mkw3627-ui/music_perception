@@ -1,0 +1,24 @@
+name: Release N.E.K.O Plugin
+
+# 市场发布版本走 GitHub Release：推一个 v<plugin.toml 里的 version> 标签，
+# 由 N.E.K.O 官方可复用工作流打包、跑 market check、生成 market-evidence.json
+# 并创建 Release（附件就是 .neko-plugin）。市场页面再从这个 Release 选版本发布。
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  # 上游 plugin-market-release.yml 2026-11-10 起拆成 release/evidence/attest 三个作业，
+  # attest 需要 id-token: write + attestations: write 做 provenance 签名；调用方不授权
+  # 会在启动阶段直接 startup_failure（无任何作业日志）。
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    uses: Project-N-E-K-O/N.E.K.O/.github/workflows/plugin-market-release.yml@main
+    with:
+      plugin-id: music_perception
+      neko-ref: main

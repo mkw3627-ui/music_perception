@@ -1,0 +1,834 @@
+{
+  "schema": "neko-audio-tool-directory-v1",
+  "version": "0.9.14",
+  "plugin_id": "music_perception",
+  "display_name": "为她所听 · 音频感知与声道中控",
+  "scope": "用户授权的 Windows 应用进程声道与局部音频特征",
+  "when_to_use": "默认监听电脑输出并自动扫描有声应用；标签初筛待复核。AI 可主动扫描、复核并选择独立应用声道。只有发声且经复核后才按需加载歌声/视频模型；由AI自主决定如何表达。",
+  "label_workflow": "音量会话有声 → 本地候选标签（窗口标题 → 进程名白名单 → 宿主 LLM 按进程名分类） → 可选 AI/窗口复核 review_audio_source_label（不是必需） → AI 可 focus_audio_application 指定该应用 → 只在声音与复核标签一致时加载歌声/视频模型；主程序 AI 音源永不进入识别。",
+  "sharing": "后台 push_message 使用 visibility=[] 与 ai_behavior=read。仅数据，不请求生成对话；相同状态去重。",
+  "limitations": [
+    "Windows session peak meter does not establish media kind",
+    "Process-tree WASAPI excludes other application trees but cannot split tabs within one process",
+    "System speaker loopback cannot subtract AI audio reliably",
+    "The SDK path transports text/event metadata, not sound waveform/audio attachments",
+    "External verification is reported evidence, not a claim this plugin has read windows.",
+    "Singing Qwen3-ASR/Whisper tier predictions are hypotheses, not a 5%-error guarantee; live validation requires labelled separated singing clips.",
+    "Older Whisper checkpoints remain dedicated to video speech; four song-vocal checkpoints use a separate private venv and model cache.",
+    "选原始/增强音轨只决定新的歌声识别输入；用户需试听判断，干净音质不等于准确识别。",
+    "Qwen GPU + RAM 权重分层为需实机验证的实验功能；并非控制 NVIDIA Windows WDDM 共享显存，不适用于 CT2/ONNX。",
+    "Qwen 无 ForcedAligner 时的字幕时间为粗估，只有文本和推测时间，禁止把它解读为精确到字的歌词断句。",
+    "LyricsWorkerError 会区分超时、异常退出、过大响应和 stdout 污染；只有宿主实测可确认根因。"
+  ],
+  "entrypoints": [
+    {
+      "id": "get_ai_auditory_context",
+      "name": "AI 获取最近的音乐事件",
+      "description": "AI 按需读取最近节拍时间、声层、情绪线索和可选原始频谱；不触发回复。",
+      "ui_action": false,
+      "purpose": "ai_read_only_or_sharing",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": [
+        "include_recent_history",
+        "max_parts",
+        "include_raw_spectrum",
+        "song_scope"
+      ]
+    },
+    {
+      "id": "get_current_media_for_ai",
+      "name": "AI 读取当前音乐或视频声音",
+      "description": "只读，不触发聊天或播放，不允许未授权读取",
+      "ui_action": false,
+      "purpose": "ai_read_only_or_sharing",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": []
+    },
+    {
+      "id": "get_live_audio_content",
+      "name": "统一音频面板的当前语音和标签",
+      "description": "只读当前来源的本地音频类型与视频语音候选；音乐歌词仍由 get_live_lyrics 返回。不启动采集、不触发AI回复、绝不提供原始 PCM。",
+      "ui_action": false,
+      "purpose": "ai_read_only_or_sharing",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": [
+        "_for_ui"
+      ]
+    },
+    {
+      "id": "get_media_scene",
+      "name": "读取音乐视频混音状态（只读）",
+      "description": "包括多来源判定和视频语音可用状态，但不返回原始音频",
+      "ui_action": false,
+      "purpose": "ai_read_only_or_sharing",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": []
+    },
+    {
+      "id": "set_ai_delivery",
+      "name": "允许AI静默读取所有已授权音频结果",
+      "description": "单独用户授权；结构化音乐、视频语音与声道标签只供AI读取，不产生聊天消息；AI自行决定是否提及",
+      "ui_action": true,
+      "purpose": "ai_read_only_or_sharing",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": [
+        "enabled"
+      ]
+    },
+    {
+      "id": "set_ai_voice_playback",
+      "name": "通知本插件 AI 语音正在输出",
+      "description": "供 N.E.K.O TTS 宿主在播放开始/结束时调用；也可手动切换。未真实独立分轨时阻断混合识别。",
+      "ui_action": true,
+      "purpose": "ai_read_only_or_sharing",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": [
+        "active"
+      ]
+    },
+    {
+      "id": "tell_ai",
+      "name": "兼容入口：读取歌曲分析",
+      "description": "旧接口不再触发角色发言；仅将上次分析结果返回给调用方，供 AI 自主决定如何使用",
+      "ui_action": false,
+      "purpose": "ai_read_only_or_sharing",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": []
+    },
+    {
+      "id": "analyze_song",
+      "name": "分析整首歌",
+      "description": "提取完整本地音乐的节奏、频谱、旋律近似曲线和情绪",
+      "ui_action": false,
+      "purpose": "audio_analysis",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": [
+        "path",
+        "detail"
+      ]
+    },
+    {
+      "id": "get_audio_tool_guide",
+      "name": "AI 读取全部音频插件入口说明",
+      "description": "返回官方注册的插件入口点及只读/主动操作区别；不下载、不启动录音、不发消息。",
+      "ui_action": false,
+      "purpose": "audio_analysis",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": []
+    },
+    {
+      "id": "get_last_report",
+      "name": "最近一次完整分析",
+      "description": "供插件面板显示整首歌的时序频谱和段落数据",
+      "ui_action": false,
+      "purpose": "audio_analysis",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": []
+    },
+    {
+      "id": "get_status",
+      "name": "统一音频感知中控状态",
+      "description": "读取本地音频、音源、模型和采集状态；不提供录音，不推送聊天消息",
+      "ui_action": false,
+      "purpose": "audio_analysis",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": [
+        "_for_ui"
+      ]
+    },
+    {
+      "id": "inspect_segment",
+      "name": "查询歌曲时间段",
+      "description": "查询最近分析的歌曲的指定秒数范围",
+      "ui_action": false,
+      "purpose": "audio_analysis",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": [
+        "start_s",
+        "end_s"
+      ]
+    },
+    {
+      "id": "listen_now",
+      "name": "听一下当前电脑声音",
+      "description": "仅在用户通过面板主动点击后，复用 keyboard_controller 的 Windows WASAPI 短时声卡回环采集；不录制完整歌曲、不保存音频。",
+      "ui_action": false,
+      "purpose": "audio_analysis",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": [
+        "duration"
+      ]
+    },
+    {
+      "id": "pause_plugin",
+      "name": "暂停为她所听并释放歌词显存",
+      "description": "用户暂停插件时立即关闭本插件的音频与歌词子进程，释放其CUDA显存；保留授权、已下载模型和最近两首记录",
+      "ui_action": true,
+      "purpose": "audio_analysis",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": []
+    },
+    {
+      "id": "recent_two_songs",
+      "name": "最近两首歌曲",
+      "description": "只保留两首歌各自的音乐事件摘要",
+      "ui_action": false,
+      "purpose": "audio_analysis",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": []
+    },
+    {
+      "id": "resume_plugin",
+      "name": "恢复为她所听插件",
+      "description": "恢复插件系统声音监听；从已校验的本地权重重新加载歌词模型，不重新安装环境",
+      "ui_action": true,
+      "purpose": "audio_analysis",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": []
+    },
+    {
+      "id": "scan_music",
+      "name": "查看可分析歌曲",
+      "description": "列出授权音乐目录中支持的音频文件（最多 60 首）",
+      "ui_action": false,
+      "purpose": "audio_analysis",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": []
+    },
+    {
+      "id": "start_auto_listen",
+      "name": "开启自动音乐识别",
+      "description": "用户明确同意后开启系统扬声器回环监听；重新启动时继续运行。不会录麦克风或传输原始声音",
+      "ui_action": true,
+      "purpose": "audio_analysis",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": [
+        "consent"
+      ]
+    },
+    {
+      "id": "stop_auto_listen",
+      "name": "停止自动音乐识别",
+      "description": "停止监听、撤回自动启动授权，丢弃未完成的音频片段",
+      "ui_action": true,
+      "purpose": "audio_analysis",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": []
+    },
+    {
+      "id": "activate_verified_lyrics_model",
+      "name": "验证并启用已下载的歌词模型",
+      "description": "必须先校验SHA-256，再实际加载并执行CPU/CUDA静音推理，成功后才原子切换配置",
+      "ui_action": true,
+      "purpose": "model_and_environment",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": [
+        "quality",
+        "device"
+      ]
+    },
+    {
+      "id": "check_lyrics_gpu",
+      "name": "检查歌词识别显卡兼容性",
+      "description": "只运行一次独立 CTranslate2 CUDA 检查，不下载安装模型，也不打开系统声音。",
+      "ui_action": true,
+      "purpose": "model_and_environment",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": []
+    },
+    {
+      "id": "fallback_verified_lyrics_model",
+      "name": "恢复本机已验证的歌词模型",
+      "description": "仅使用本机经过SHA-256校验的权重，CPU试推理成功才切换，绝不触发模型下载",
+      "ui_action": true,
+      "purpose": "model_and_environment",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": []
+    },
+    {
+      "id": "get_live_lyrics",
+      "name": "歌词面板最近两首歌曲",
+      "description": "当前歌曲的原始ASR时间戳和按自然语义/可观测停顿合并的display_lines；节拍仅作参考，Qwen时间粗估不可冒充强制对齐。",
+      "ui_action": false,
+      "purpose": "model_and_environment",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": []
+    },
+    {
+      "id": "get_lyrics_diagnostics",
+      "name": "查看歌词全链路诊断",
+      "description": "只读取歌词工作阶段、依赖/显卡检测和安全日志；不返回录音、歌词或私有路径之外的个人数据",
+      "ui_action": true,
+      "purpose": "model_and_environment",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": []
+    },
+    {
+      "id": "get_lyrics_model_catalog",
+      "name": "检查四档歌词模型文件状态",
+      "description": "只读取本机四档模型文件、真实下载进度和SHA校验记录；不启动GPU或读取音频",
+      "ui_action": false,
+      "purpose": "model_and_environment",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": [
+        "_for_ui"
+      ]
+    },
+    {
+      "id": "install_app_capture",
+      "name": "用户确认安装逐进程 WASAPI 音源组件",
+      "description": "只安装固定版本 proc-tap Windows wheel 到插件独立目录，不修改 N.E.K.O 或系统 Python",
+      "ui_action": true,
+      "purpose": "model_and_environment",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": [
+        "confirmed"
+      ]
+    },
+    {
+      "id": "prepare_lyrics_model",
+      "name": "准备或修复当前歌词模型",
+      "description": "明确点击后检查或补齐当前歌词档位的公开模型权重；完全不依赖 YAMNet 音乐识别，也不上传电脑音频。",
+      "ui_action": false,
+      "purpose": "model_and_environment",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": [
+        "confirmed"
+      ]
+    },
+    {
+      "id": "prepare_visual_install",
+      "name": "准备可视化自动构建",
+      "description": "仅供用户在 N.E.K.O 插件界面明确点击后执行：下载 YAMNet、同步自己的 vendor 依赖、验证本机模型并检查插件。不会安装、开启监听或修改其他插件。",
+      "ui_action": false,
+      "purpose": "model_and_environment",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": [
+        "user_confirmed"
+      ]
+    },
+    {
+      "id": "repair_environment",
+      "name": "重新检查并修复音乐环境",
+      "description": "在插件数据目录中自动修复可选音频库和 YAMNet 模型，不修改宿主或其他插件",
+      "ui_action": true,
+      "purpose": "model_and_environment",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": []
+    },
+    {
+      "id": "run_lyrics_diagnostics",
+      "name": "一键检测歌词环境和 GPU",
+      "description": "按需检查独立 Python、Whisper、CTranslate2、CUDA 和缓存模型；闲置时用合成静音进行真实推理；不下载权重、不上传音频",
+      "ui_action": true,
+      "purpose": "model_and_environment",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": []
+    },
+    {
+      "id": "set_download_source",
+      "name": "确认后保存模型下载来源优先级",
+      "description": "仅改变官方/镜像尝试顺序，不下载、不上传音频",
+      "ui_action": true,
+      "purpose": "model_and_environment",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": [
+        "source",
+        "confirmed"
+      ]
+    },
+    {
+      "id": "set_lyrics_device",
+      "name": "设置歌词识别运行设备",
+      "description": "兼容旧界面入口。必须通过本地 SHA-256 验证和 CPU/CUDA 实际预热后才能切换。",
+      "ui_action": false,
+      "purpose": "model_and_environment",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": [
+        "device"
+      ]
+    },
+    {
+      "id": "set_lyrics_language",
+      "name": "设置本地歌词识别语言",
+      "description": "自动识别或中文/日文/英文固定转写；不影响声音监听、不重载模型权重",
+      "ui_action": true,
+      "purpose": "model_and_environment",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": [
+        "language"
+      ]
+    },
+    {
+      "id": "set_lyrics_quality",
+      "name": "设置歌词识别模型档位",
+      "description": "兼容旧界面入口；先下载和SHA校验，CPU/GPU试推理成功才保存新档位。",
+      "ui_action": false,
+      "purpose": "model_and_environment",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": [
+        "quality"
+      ]
+    },
+    {
+      "id": "set_stem_device",
+      "name": "确认后选择人声分离运行设备",
+      "description": "CPU默认可用；NVIDIA GPU是否可用需要ONNX Runtime CUDA Provider实际检验",
+      "ui_action": true,
+      "purpose": "model_and_environment",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": [
+        "device",
+        "confirmed"
+      ]
+    },
+    {
+      "id": "set_stem_separation",
+      "name": "开启或关闭本地人声/伴奏分离",
+      "description": "可选UVR MDX-Net，需本机SHA校验通过；开启时仅分离已确认音乐，出错自动回原声。",
+      "ui_action": true,
+      "purpose": "model_and_environment",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": [
+        "enabled"
+      ]
+    },
+    {
+      "id": "stage_lyrics_model",
+      "name": "检查并下载所选歌词模型",
+      "description": "先检查磁盘权重，不会把未校验的新档位保存为当前档位；公开文件下载显示实际进度",
+      "ui_action": true,
+      "purpose": "model_and_environment",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": [
+        "quality",
+        "download_source",
+        "confirmed"
+      ]
+    },
+    {
+      "id": "start_stem_download",
+      "name": "确认后下载并校验人声分离模型",
+      "description": "独立后台下载约67MB官方SHA绑定的UVR ONNX，不上传音频，不自动启用；需用户在弹窗同意",
+      "ui_action": true,
+      "purpose": "model_and_environment",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": [
+        "confirmed",
+        "download_source"
+      ]
+    },
+    {
+      "id": "uninstall_lyrics_model",
+      "name": "卸载指定的插件私有歌词模型",
+      "description": "明确确认后仅删除一个档位在 data/models/whisper_multilingual 的缓存，不删除共享缓存或运行环境",
+      "ui_action": true,
+      "purpose": "model_and_environment",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": [
+        "quality",
+        "confirmed"
+      ]
+    },
+    {
+      "id": "uninstall_stem_model",
+      "name": "卸载插件私有人声分离模型",
+      "description": "明确确认后仅删除 UVR-MDX-NET-Inst_HQ_3.onnx 和其临时文件，不影响 Whisper",
+      "ui_action": true,
+      "purpose": "model_and_environment",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": [
+        "confirmed"
+      ]
+    },
+    {
+      "id": "verify_stem_model_files",
+      "name": "只读校验已有分离模型",
+      "description": "检查模型哈希，完成后记录SHA结果；不会联网、不会启动GPU",
+      "ui_action": true,
+      "purpose": "model_and_environment",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": []
+    },
+    {
+      "id": "visual_install_status",
+      "name": "自动构建准备状态",
+      "description": "读取插件可视化构建准备阶段（不会启动任何程序）",
+      "ui_action": false,
+      "purpose": "model_and_environment",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": []
+    },
+    {
+      "id": "get_audio_source_control",
+      "name": "音源中控 · 跨插件来源与候选标签状态",
+      "description": "仅结构化音源/路由和分类证据，不返回 PCM、歌曲歌词或聊天内容",
+      "ui_action": false,
+      "purpose": "source_control",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": []
+    },
+    {
+      "id": "get_current_audio_sources_for_ai",
+      "name": "AI 查看当前有声应用与待确认标签",
+      "description": "只读已缓存的 Windows 音频会话电平与 PID 标签；标签是候选，不提供录音；授权后可供 AI 主动查询",
+      "ui_action": false,
+      "purpose": "source_control",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": []
+    },
+    {
+      "id": "get_selected_app_outputs",
+      "name": "供其他插件读取单一应用声道的文字和音乐分析",
+      "description": "须先在控制台授权共享。只读当前已验证应用的候选文本和音乐事件，无PCM；不触发AI发言",
+      "ui_action": false,
+      "purpose": "source_control",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": []
+    },
+    {
+      "id": "list_application_sources",
+      "name": "只显示正在发声的应用进程",
+      "description": "只读 Windows 音频会话电平，不录音、不加载模型；静音应用不列出",
+      "ui_action": true,
+      "purpose": "source_control",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": []
+    },
+    {
+      "id": "list_audio_outputs",
+      "name": "查看可监听的输出设备",
+      "description": "仅枚举扬声器输出，不访问麦克风和应用内容",
+      "ui_action": true,
+      "purpose": "source_control",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": []
+    },
+    {
+      "id": "pin_ai_main_process",
+      "name": "经用户确认绑定 N.E.K.O AI 发声程序",
+      "description": "仅保存用户选择的可执行文件完整路径，重启后自动识别其进程树；不会改变 Windows 音量与实际播放输出",
+      "ui_action": true,
+      "purpose": "source_control",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": [
+        "pid",
+        "created",
+        "confirmed"
+      ]
+    },
+    {
+      "id": "review_audio_source_label",
+      "name": "AI/窗口插件更新应用音源标签",
+      "description": "先从 get_audio_source_control 获取 source_id；AI 或窗口插件可选择性改写本地候选标签，窗口信息不是必需。仅接受当前有声PID+创建时间；固定AI应用不可改写。需用户授权AI共享或跨插件共享。",
+      "ui_action": false,
+      "purpose": "source_control",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": [
+        "source_id",
+        "label",
+        "evidence"
+      ]
+    },
+    {
+      "id": "select_app_capture",
+      "name": "指定唯一采集的 Windows 应用进程",
+      "description": "需要用户明确确认，只在所选进程+子进程回环采集；其余应用没有 PCM 输入",
+      "ui_action": true,
+      "purpose": "source_control",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": [
+        "pid",
+        "created",
+        "mode",
+        "confirmed"
+      ]
+    },
+    {
+      "id": "select_system_capture",
+      "name": "经用户确认恢复原先的混音回环方式",
+      "description": "系统回环会包含播放到所选扬声器的所有应用声音，不是逐应用分离",
+      "ui_action": true,
+      "purpose": "source_control",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": [
+        "confirmed"
+      ]
+    },
+    {
+      "id": "set_capture_output",
+      "name": "选择监听哪一个扬声器设备",
+      "description": "切换前必须停止监听。AI 音色隔离需要 Windows 音量合成器将 AI 应用路由到另一输出。",
+      "ui_action": true,
+      "purpose": "source_control",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": [
+        "output_id",
+        "ai_separate",
+        "confirmed"
+      ]
+    },
+    {
+      "id": "set_external_channel_share",
+      "name": "授权另一个插件读取选中应用的结构化声音摘要",
+      "description": "需经用户确认才更改，默认关闭。仅包含候选文本和事件，不提供原始PCM",
+      "ui_action": true,
+      "purpose": "source_control",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": [
+        "enabled",
+        "confirmed"
+      ]
+    },
+    {
+      "id": "set_media_source_role",
+      "name": "标记声音来自音乐、视频或 AI",
+      "description": "只影响本地二次验证。按 Windows 媒体会话来源 ID 匹配，不能证明实际有声。",
+      "ui_action": true,
+      "purpose": "source_control",
+      "permissions": "Depends on consent gates of the implementation; read-only APIs do not start capture.",
+      "data_level": "metadata / structured results; no raw audio returned by the plugin API",
+      "parameters": [
+        "app",
+        "role"
+      ]
+    },
+    {
+      "id": "install_stem_gpu",
+      "name": "安装分离专用 NVIDIA GPU 环境",
+      "description": "需要用户明确确认；仅安装插件隔离的 GPU ONNX Runtime，不修改 Whisper 或系统 Python，不会自动开启监听。",
+      "ui_action": true,
+      "purpose": "user_confirmed_local_gpu_runtime_management",
+      "permissions": "用户点击后启动；禁止自动下载或修改系统环境",
+      "data_level": "仅设备/运行状态，不传原始声音",
+      "parameters": [
+        "confirmed"
+      ]
+    },
+    {
+      "id": "check_stem_gpu",
+      "name": "检查 GPU 分离推理",
+      "description": "独立进程检测 CUDA Provider、实际模型加载与分离推理；正在使用模型时避免重复占显存。",
+      "ui_action": true,
+      "purpose": "user_confirmed_local_gpu_runtime_management",
+      "permissions": "用户点击后启动；禁止自动下载或修改系统环境",
+      "data_level": "仅设备/运行状态，不传原始声音",
+      "parameters": []
+    },
+    {
+      "id": "install_singing_model",
+      "name": "用户确认后安装专业歌声四档模型",
+      "description": "仅在用户确认后，于插件独立 Python 环境准备专业 Qwen/Whisper 权重，固定上游 SHA-256；旧视频权重保持不变。",
+      "ui_action": true,
+      "purpose": "user_confirmed_private_singing_model_management",
+      "permissions": "用户明确确认后执行；绝不在未授权的 AI 读取中自动下载安装/卸载",
+      "data_level": "模型安装/校验状态；不回传系统音频和歌曲正文",
+      "parameters": [
+        "quality",
+        "source",
+        "device",
+        "confirmed"
+      ]
+    },
+    {
+      "id": "verify_singing_import",
+      "name": "离线核验手动歌声模型",
+      "description": "官方源/镜像下载失败时，对用户手动放置的固定版本文件进行纯本地 SHA-256 校验，不联网、不覆盖视频模型。",
+      "ui_action": true,
+      "purpose": "user_confirmed_private_singing_model_management",
+      "permissions": "用户明确确认后执行；绝不在未授权的 AI 读取中自动下载安装/卸载",
+      "data_level": "模型安装/校验状态；不回传系统音频和歌曲正文",
+      "parameters": [
+        "quality",
+        "confirmed"
+      ]
+    },
+    {
+      "id": "activate_singing_model",
+      "name": "歌声模型实际推理验证并启用",
+      "description": "在后台预热实际 CPU/CUDA，不阻塞 Hosted 界面；预热失败不替换当前模型，不声称 5% 已达标。",
+      "ui_action": true,
+      "purpose": "user_confirmed_private_singing_model_management",
+      "permissions": "用户明确确认后执行；绝不在未授权的 AI 读取中自动下载安装/卸载",
+      "data_level": "模型安装/校验状态；不回传系统音频和歌曲正文",
+      "parameters": [
+        "quality",
+        "device"
+      ]
+    },
+    {
+      "id": "uninstall_singing_model",
+      "name": "安全卸载单个歌声模型",
+      "description": "用户确认后卸载指定档位；在 Windows 文件锁占用时明确失败；不删除原视频 Whisper 模型。",
+      "ui_action": true,
+      "purpose": "user_confirmed_private_singing_model_management",
+      "permissions": "用户明确确认后执行；绝不在未授权的 AI 读取中自动下载安装/卸载",
+      "data_level": "模型安装/校验状态；不回传系统音频和歌曲正文",
+      "parameters": [
+        "quality",
+        "confirmed"
+      ]
+    },
+    {
+      "id": "scan_audio_apps_for_ai",
+      "name": "AI 立即扫描有声应用",
+      "description": "AI read-only; no PCM/ASR",
+      "ui_action": false,
+      "purpose": "ai_audio_routing",
+      "permissions": "Requires authorized monitoring; never records unknown PID or AI host.",
+      "data_level": "selected application identifier and source metadata"
+    },
+    {
+      "id": "focus_live_audio_source",
+      "name": "安全切换正在监听的应用",
+      "description": "user confirmed; one application process-tree",
+      "ui_action": true,
+      "purpose": "ai_audio_routing",
+      "permissions": "Requires authorized monitoring; never records unknown PID or AI host.",
+      "data_level": "selected application identifier and source metadata"
+    },
+    {
+      "id": "ai_focus_audio_application",
+      "name": "AI 选择待监听的应用",
+      "description": "AI may focus only an active, authorized application",
+      "ui_action": false,
+      "purpose": "ai_audio_routing",
+      "permissions": "Requires authorized monitoring; never records unknown PID or AI host.",
+      "data_level": "selected application identifier and source metadata"
+    },
+    {
+      "id": "set_stem_vocal_input",
+      "name": "选择用于歌词ASR的分离音轨",
+      "description": "用户可选择 raw 原始分离人声（默认）或 enhanced 自适应增强人声；切换后释放该首歌曲旧歌词候选，不重启模型；仅 UI 或用户请求调用。",
+      "ui_action": true,
+      "purpose": "user_setting",
+      "permissions": "必须来自用户操作；不会下载模型或开启新录音",
+      "data_level": "model input selection, not raw audio",
+      "parameters": [
+        "source"
+      ]
+    },
+    {
+      "id": "set_adaptive_resources",
+      "name": "设置显存预算和Qwen GPU+RAM实验分层",
+      "description": "用户授权后设置显存保留量、CUDA优先/安装档位降级、纯CPU应急许可、Qwen层权重GPU+系统内存分层。不能强制Windows共享GPU显存，也不保证CUDA+RAM在设备上成功。",
+      "ui_action": true,
+      "purpose": "user_setting",
+      "permissions": "必须明确用户确认；不得不经确认启用CPU许可",
+      "data_level": "settings only; no audio",
+      "parameters": [
+        "domain",
+        "enabled",
+        "reserve_mib",
+        "cpu_fallback",
+        "gpu_ram_offload",
+        "confirmed"
+      ]
+    }
+  ],
+  "llm_tools": [
+    {
+      "name": "music_perception_analyze_song",
+      "entry_method": "analyze_song",
+      "description": "根据音乐文件真实波形/频谱读取整首歌的节拍BPM、每段节奏、粗略旋律、调性与快乐/悲伤气氛。只分析用户允许的本地音乐文件，不监听系统麦克风，不联网。情绪推测必须保留置信度与限制。"
+    },
+    {
+      "name": "music_perception_audio_tool_guide",
+      "entry_method": "get_audio_tool_guide",
+      "description": "查询「为她所听」全部已注册入口点以及用途、权限、音频标签约定。只读，供 AI 按需了解工具，不会主动发送重复说明。"
+    },
+    {
+      "name": "music_perception_hear_current_media",
+      "entry_method": "get_current_media_for_ai",
+      "description": "只读当前音频中心：已确认的音乐返回节拍及歌词候选，视频返回语音候选。应用标签是待确认的初筛，可通过音源列表读取，由窗口插件或 AI 复核；混合、AI 自身声音及未知来源不提供内容。AI 自主决定是否向用户提及。"
+    },
+    {
+      "name": "music_perception_hear_system_music",
+      "entry_method": "get_ai_auditory_context",
+      "description": "获取电脑默认扬声器正在播放、且已由音乐门控确认的最新频谱。优先理解带时间戳的节拍/打击候选、声层、音高变化和每段情绪；默认返回结构化音乐事件与不确定的中日英歌词候选；频谱按需读取；不编造歌词、重拍和人声分离。不会主动在聊天框显示数据。"
+    },
+    {
+      "name": "music_perception_inspect_segment",
+      "entry_method": "inspect_segment",
+      "description": "在已经分析的完整歌曲报告中按起止秒查询节奏、旋律起伏和频谱分布。用于回答例如‘副歌前30秒有什么变化’。"
+    },
+    {
+      "name": "music_perception_list_audio_sources",
+      "entry_method": "get_current_audio_sources_for_ai",
+      "description": "只读已授权音源中控：给出正在发声的应用、来源ID、音乐/视频候选标签及其证据状态。不读取屏幕和聊天，也不触发 AI 回复。"
+    },
+    {
+      "name": "music_perception_recent_two_songs",
+      "entry_method": "recent_two_songs",
+      "description": "仅当用户明确要求比较当前和上一首歌、或查询上一首歌时，才读取最近两首的节拍、和弦与歌词。用户只说“这首歌”“现在听的歌”时应优先调用 music_perception_hear_system_music（默认 current），切勿拿上一首的歌词回答当前歌曲。不会返回录音。"
+    },
+    {
+      "name": "music_perception_review_audio_source_label",
+      "entry_method": "review_audio_source_label",
+      "description": "AI 可结合已知信息（窗口内容如可用、进程名、宿主分类）复核某个发声应用的标签。先用音源列表获取 source_id；仅改候选标签，不触发说话或录音。不能修改固定的 N.E.K.O AI 标签；必须已有用户授权的 AI 感知。"
+    },
+    {
+      "name": "music_perception_scan_active_audio_apps",
+      "entry_method": "scan_audio_apps_for_ai",
+      "description": "读取发声应用列表、PID+创建时间、候选标签；不加载大型模型。"
+    },
+    {
+      "name": "music_perception_focus_audio_application",
+      "entry_method": "ai_focus_audio_application",
+      "description": "AI 指定单个正在发声的应用进程作为当前音源；切换后仍需AI复核内容类别，才可运行识别。"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+[project]
+name = "neko-plugin-music-perception"
+version = "0.9.21"
+description = "Application-driven dual ASR with unified model download progress, private CUDA and adaptive VRAM"
+requires-python = ">=3.11,<3.14"
+dependencies = []
+
+# 引导插件无第三方依赖，官方宿主可直接加载；音频功能为可选扩展，
+# 缺失时插件从自身隔离数据目录自动准备，不改动 N.E.K.O 公共环境。
+[project.optional-dependencies]
+audio = [
+  "librosa>=0.10.2,<0.12",
+  "numpy>=1.24",
+  "scipy>=1.10",
+  "soundfile>=0.12",
+  "soxr>=0.3",
+  "SoundCard>=0.4.5,<0.5",
+  "ai-edge-litert>=2.1.3,<3",
+  "imageio-ffmpeg>=0.5,<0.7",
+  "faster-whisper>=1.2,<2",
+  "winrt-Windows.Media.Control>=3.2.1,<4; sys_platform == 'win32'",
+]
+
+# Essentia must be installed separately with TensorFlow support; model license applies.
+test = ["pytest>=7", "pytest-asyncio>=0.23"]
+
+# Heavy model backends are intentionally NOT installed during plugin startup.
+# Beat This!: follow upstream repository requirements and provision a trusted
+# checkpoint separately if you enable beat_this_checkpoint.

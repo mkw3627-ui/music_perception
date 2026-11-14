@@ -1,0 +1,710 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>为她所听</title>
+<style>
+:root { color-scheme: dark; --bg:#0b1020;--panel:#171e32;--border:#2c3853;--ink:#edf4ff;--muted:#9cabca;--accent:#90d7ff;--violet:#a49bff;--mint:#82e2ca;--danger:#ffacae }
+* {box-sizing:border-box} body {margin:0;min-height:100vh;background:radial-gradient(ellipse at 80% 0%,#1a3150 0,transparent 50%),radial-gradient(ellipse at 0 25%,#272349 0,transparent 36%),var(--bg);color:var(--ink);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Microsoft YaHei",sans-serif;padding:24px}
+.app {max-width:1100px;margin:auto} h1 {font-size:25px;margin:0;font-weight:720;letter-spacing:.01em} h2 {font-size:15px;font-weight:680;margin:0 0 14px} .intro {margin:5px 0 22px;color:var(--muted)}
+.tag {font-size:11px;border:1px solid #46617a;color:var(--accent);background:#1b314a;border-radius:6px;padding:3px 7px;margin-left:8px;vertical-align:middle}
+.card {border:1px solid var(--border);background:rgba(23,30,50,.9);border-radius:15px;padding:20px;margin-bottom:16px;box-shadow:0 15px 35px rgba(0,0,0,.09)} .controls {display:grid;grid-template-columns:minmax(230px,1fr) auto;gap:10px;align-items:end}
+label {display:block;font-size:12px;color:var(--muted);margin-bottom:5px} input,select {background:#0e1525;color:var(--ink);border:1px solid #384963;outline:none;padding:11px 13px;border-radius:9px;min-width:0;width:100%;font:inherit} input:focus,select:focus {border-color:var(--accent)} button {padding:10px 15px;border:1px solid #50677e;border-radius:10px;background:#22354b;color:var(--ink);cursor:pointer;white-space:nowrap;font:inherit} button:hover {border-color:var(--accent);background:#2b435b} button:disabled {opacity:.5;cursor:default} button.primary {background:linear-gradient(120deg,#3997b9,#6156a1);border-color:transparent;color:white;font-weight:700} .btnline {display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-top:12px} .muted {color:var(--muted);font-size:12px} .message {font-size:12px;color:var(--mint)} .message.error {color:var(--danger)}
+.metrics {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px} .metric {background:#101827;border:1px solid #27354e;border-radius:11px;padding:15px} .metric b {display:block;font-size:22px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e0f7ff;line-height:1.4} .metric small {color:var(--muted)} .note {margin-top:14px;border-left:3px solid #9a9be6;padding:10px 12px;border-radius:0 8px 8px 0;background:#272941;color:#d5d9ff;font-size:12px} .legend{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:7px;font-size:11px;color:var(--muted)} .key{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:5px}
+canvas {display:block;width:100%;border-radius:10px;background:#0e1425} .canvasbox {position:relative;overflow:hidden;border:1px solid #2c3853;border-radius:10px} .axis {display:flex;justify-content:space-between;color:var(--muted);font-size:11px;margin:5px 2px 0}
+.table-wrap {overflow-x:auto;max-height:400px;overflow-y:auto;border:1px solid var(--border);border-radius:9px} table {width:100%;border-collapse:collapse;white-space:nowrap;font-size:12px} th,td{text-align:left;padding:11px 13px;border-bottom:1px solid #28354a} th{color:#acc3e5;position:sticky;top:0;background:#1b2942} tr:hover td{background:#23324a;cursor:pointer} tr.selected td{background:#2a3c56} .bar{display:inline-block;height:6px;min-width:3px;background:linear-gradient(90deg,#74b6f3,#bf98f2);vertical-align:middle;border-radius:10px}
+.spark-bands{height:64px;display:flex;align-items:flex-end;gap:4px;padding:8px 6px;background:#101827;border-radius:10px;border:1px solid #27354e}.spark-band{flex:1;min-width:3px;border-radius:4px 4px 0 0;background:linear-gradient(0deg,#477ed0,#82e2ca);transition:height .3s ease}.grid2{display:grid;grid-template-columns:1.4fr 1fr;gap:16px} .empty{color:var(--muted);text-align:center;padding:28px} .chip {display:inline-flex;padding:3px 8px;background:#2d314d;border:1px solid #444a73;color:#d9dcff;border-radius:5px;font-size:11px} .foot {color:var(--muted);margin:15px 3px;font-size:11px}
+
+.lyrics-switcher{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.lyrics-switcher button{border:1px solid #354968;background:#1b2942;color:#d5e7fc;border-radius:9px;padding:9px 13px;text-align:left;cursor:pointer}
+.lyrics-switcher button.active{background:#334a75;border-color:#7bb5f3;color:#fff}
+.lyrics-window{background:#121d30;border:1px solid #2d3e5c;border-radius:12px;max-height:350px;min-height:126px;overflow-y:auto;padding:8px 12px}
+.lyric-row{padding:11px 8px;border-bottom:1px solid #26364b;display:flex;align-items:flex-start;gap:12px;line-height:1.75}
+.lyric-row.now{border-left:3px solid #81d7bd;background:#20344c;border-radius:5px}
+.lyric-time{flex:0 0 60px;font-size:12px;color:#abc3df;font-variant-numeric:tabular-nums;padding-top:4px}
+.lyric-words{white-space:pre-wrap;overflow-wrap:anywhere;font-size:16px;color:#eaf4ff}
+.lyric-source{display:block;font-size:11px;color:#91aeca;margin-top:2px}
+.model-transfer[hidden]{display:none!important}
+@media(max-width:740px){body{padding:12px}.controls,.grid2{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.metric b{font-size:18px}}
+</style>
+</head>
+<body>
+<main class="app">
+  <header><h1>♫ 为她所听 <span class="tag">N.E.K.O · v0.8.1</span></h1>
+    <p class="intro">她的听觉工具：只接收系统当前默认播放设备的混音输出，音乐才进入感知。把节拍、打击候选、音高走势、情绪与中日英歌词候选组织为带时间戳的音乐事件，静默提供给 AI；数字频谱按需读取。无需选歌。</p></header>
+  <section class="card" id="install-card" aria-label="N.E.K.O 可视化插件安装" hidden>
+    <h2>安装到 N.E.K.O 插件库 <span class="tag">可视化自动构建 · 开发模式</span></h2>
+    <p class="muted">在「开发」页面加载本插件源码后，点击下方按钮。N.E.K.O 将自动完成依赖与模型准备、构建、安装包校验，再通过官方插件中心确认安装。不会启动音频监听。</p>
+    <div class="btnline"><button class="primary" id="visual-install">自动编译并安装「为她所听」</button>
+      <span class="muted" id="install-progress" role="status" aria-live="polite">准备就绪</span></div>
+    <ol class="muted" id="install-stages"><li>准备本地 YAMNet、vendor 原生音频依赖</li><li>N.E.K.O 插件构建、完整性验证</li><li>审查安装/升级计划并确认</li><li>安装、重启与清理开发注册</li></ol>
+    <p class="muted" id="install-details">此按钮只在 N.E.K.O「开发」页面注册的源码插件中使用。</p>
+  </section>
+  <section class="card" aria-label="自动环境检查与修复">
+    <h2>自动环境管理 <span class="tag" id="env-state">正在检查</span></h2>
+    <p class="muted">插件先完成启动握手，约 6 秒后才自动检查版本、独立音频库、YAMNet 模型、轻量多语言歌词模型推理依赖和原生扩展。如有缺失，会从 PyPI 和官方模型来源自动下载并验证；不会修改 N.E.K.O 的公共 Python 环境。下载和安装进度在此显示，网络不可用也能保留界面。</p>
+    <div class="btnline"><button id="retry-env">重新检查 / 自动修复</button><span class="muted" id="env-message" role="status" aria-live="polite">等待检查…</span></div>
+    <p class="muted" id="env-detail">尚未获取环境诊断数据</p>
+    <details id="env-diagnostics-box" hidden><summary class="muted">查看依赖安装器的具体报错与本地日志位置</summary>
+      <pre id="env-diagnostics" style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:230px;overflow-y:auto;color:var(--muted)"></pre>
+    </details>
+  </section>
+  <section class="card" id="lyrics-quality-card" aria-label="歌词识别模型档位">
+    <h2>歌词模型档位 <span class="tag" id="lyrics-quality-status">首次使用请选择</span></h2>
+    <p class="muted">每位用户第一次进入此插件时选择一次，之后随时可以切换。只影响歌词识别，节拍、和弦和系统声音监听继续工作。低档省资源；极高档需要较大模型及显存（首次下载约 1.62 GB），但采用 Turbo 解码器以改善速度；所有已下载权重会保留，下次直接复用。</p>
+    <div class="controls">
+      <div><label for="lyrics-quality">识别质量</label>
+        <select id="lyrics-quality">
+          <option value="low">低：Whisper Tiny 多语言 · 约 75 MB，CPU 更轻</option>
+          <option value="medium" selected>中：Whisper Base 多语言 · 约 145 MB（推荐）</option>
+          <option value="high">高：Whisper Small 多语言 · 约 484 MB，更吃内存</option>
+          <option value="ultra">极高：Whisper large-v3-turbo 多语言 · 约 1.62 GB（推荐显卡）</option>
+        </select></div>
+      <button id="save-lyrics-quality" class="primary">检查 / 继续下载所选模型</button>
+    </div>
+    <p class="muted" id="lyrics-quality-help" role="status">先检查模型：无文件则下载；通过 SHA-256 和真实 CPU/GPU 试推理后才能启用。模型下载不影响已激活的旧模型。</p>
+    <div class="controls" style="margin:8px 0 12px">
+      <div><label for="lyrics-download-source">模型下载源</label>
+        <select id="lyrics-download-source">
+          <option value="mirror" selected>国内镜像优先：hf-mirror.com → hf-mirror.net → Hugging Face 官方</option>
+          <option value="official">官方优先：Hugging Face → hf-mirror.com → hf-mirror.net</option>
+        </select></div>
+      <span class="muted">所有来源必须通过同一 SHA-256 校验；镜像可用性因网络而异。</span>
+    </div>
+    <details id="lyrics-tier-status-box" style="margin:8px 0 10px">
+      <summary class="muted">查看本机四档模型的文件状态</summary>
+      <div id="lyrics-tier-inventory" class="muted" role="status" style="margin:8px 0">正在检查已下载的模型…</div>
+    </details>
+    <div id="lyrics-model-transfer-panel" class="note model-transfer" hidden aria-label="正在下载的模型" aria-live="polite">
+      <strong id="lyrics-model-transfer-title">模型正在准备</strong>
+      <label for="lyrics-model-download-progress" id="lyrics-model-download-label">正在连接公开模型下载源</label>
+      <progress id="lyrics-model-download-progress" max="100" value="0" style="display:block;width:100%;height:14px;margin:7px 0" aria-label="所选歌词模型下载进度"></progress>
+      <p class="muted">仅下载公开模型权重，不上传录音。下载、校验期间持续显示。发生错误时保留原因和进度，供你点击「继续下载」重试；100% 仅表示 SHA-256 完整校验通过。</p>
+    </div>
+    <div class="btnline"><button id="activate-lyrics-model" class="primary" type="button" disabled>下一步：验证加载并启用</button>
+      <span id="lyrics-model-activate-status" class="muted" role="status">须先通过 SHA-256 权重校验</span></div>
+    <div class="controls" style="margin-top:16px">
+      <div><label for="lyrics-device">歌词模型运行设备（与识别档位独立）</label>
+        <select id="lyrics-device">
+          <option value="cpu" selected>CPU · INT8 / 最低占用，推荐游戏同时运行</option>
+          <option value="cuda">显卡 · NVIDIA CUDA / FP16，需兼容的 CUDA/cuDNN</option>
+        </select></div>
+      <button id="save-lyrics-device">保存运行设备</button>
+    </div>
+    <div class="btnline"><button id="check-lyrics-gpu">检测显卡兼容性</button>
+      <span class="muted" id="lyrics-device-status" role="status">默认使用 CPU；显卡模式仅支持 NVIDIA CUDA。</span></div>
+    <p class="muted" id="lyrics-device-help">此设置只改变 Whisper 歌词识别进程；不会改动系统驱动、节奏分析、歌曲缓存或已经下载的模型。显卡检测是初步检查，实际推理仍以运行状态为准。</p>
+  </section>
+  <section class="card" aria-label="音乐自动识别控制">
+    <h2>AI 听到系统播放的音乐 <span class="tag" id="monitor-status">未开启</span></h2>
+    <p class="muted">只采集 Windows 默认播放设备的 WASAPI 系统混音（你听到的那路扬声器/耳机输出），不逐一监听应用轨道，也不使用麦克风。音乐才进入事件时间线；节拍/和弦首次约 10 秒、之后约每 20 秒更新；歌词另有快通道，确认音乐约 6 秒后送出首段、之后约每 10 秒更新；句级歌词识别完即可显示，逐词精细对齐不会阻塞显示。歌词由用户选择的多语言 Whisper 档位在后台推测，可能有错误；支持 Windows 系统媒体会话的播放器可根据歌曲元数据检测无缝切歌；N.E.K.O 自带歌单也可联动。若播放器不暴露曲目，则只能依赖停顿识别，无法保证无缝切歌。AI 是否在之后的自然对话里谈到音乐，由 AI 决定。</p>
+    <div class="btnline"><button class="primary" id="start-monitor">同意并开启音乐自动识别</button><button id="pause-plugin">暂停插件并释放显存</button><button id="resume-plugin">恢复插件</button><button id="stop-monitor">停止并撤销授权</button><button id="refresh-monitor">刷新状态</button></div>
+    <div class="btnline"><label><input type="checkbox" id="auto-ai" style="width:auto;vertical-align:middle"/> 允许对话 AI 静默感知音乐时间事件及歌词候选（不会在聊天框显示插件数据或强制 AI 回复；歌词文字也可能发送至已配置的云端模型）</label></div>
+    <p class="muted" id="monitor-details" role="status">等待读取监听状态…</p>
+    <div class="metrics" style="margin-top:12px">
+      <div class="metric"><small>输入声音电平</small><b id="live-level">—</b></div>
+      <div class="metric"><small>音乐识别分数</small><b id="live-score">—</b></div>
+      <div class="metric"><small>本次已接收</small><b id="live-heard">—</b></div>
+      <div class="metric"><small>已生成音乐事件</small><b id="live-analyzed">0 段</b></div>
+    </div>
+    <div style="margin-top:14px"><label id="live-progress-label" for="live-progress">等待确认音乐…</label>
+      <progress id="live-progress" max="100" value="0" style="width:100%;height:12px;accent-color:#82e2ca"></progress></div>
+    <label>电脑播放声音的实时频段预览（仅本地计算；不代表已经判断为音乐）</label>
+    <div class="spark-bands" id="live-bands" aria-label="电脑系统声音十六段频谱"><span class="muted">等待音频…</span></div>
+    <p class="muted" id="live-timeline" aria-live="polite">AI 获取的是节拍秒数、打击瞬态、音高趋势与情绪候选；并非原始音频。训练模型不可用时重拍和人声分离会标记未知。</p>
+    <div class="note" style="margin-top:12px"><b>独立歌曲记录（只留两首）</b><div id="recent-song-list" class="muted">等待第一首音乐…</div></div>
+  </section>
+  <section class="card" id="live-lyrics-card" aria-label="实时歌词，按歌曲独立显示">
+    <h2>实时歌词 <span class="tag">只显示最近两首 · 含中途切歌</span></h2>
+    <p class="muted">歌词由本地多语言模型逐段识别，不用等歌曲播放结束。可以单独关闭 AI 共享，面板仍会继续本地识别。显示的是有时间戳的歌词候选，不保证与原唱文字完全一致。若播放器提供可靠进度则优先显示估算歌曲时间，否则显示自确认音乐开始后的累计时间。</p>
+    <div class="controls">
+      <div><label for="lyrics-language">歌词语言（中文歌建议选中文优先）</label>
+        <select id="lyrics-language">
+          <option value="auto">自动检测：中 / 日 / 英混合</option>
+          <option value="zh">中文优先：按中文转写</option>
+          <option value="ja">日语：按日语转写</option>
+          <option value="en">英语：按英语转写</option>
+        </select></div>
+      <button id="save-lyrics-language">保存歌词语言</button>
+    </div>
+    <p class="muted" id="lyrics-local-status" role="status">等待系统音乐；独立识别的歌词会显示在这里。</p>
+    <details class="note" id="lyrics-diagnostics-panel" style="margin:12px 0">
+      <summary style="cursor:pointer;font-weight:650">歌词识别 · 全链路检测与日志</summary>
+      <p class="muted">定位模型加载、缓存、NVIDIA CUDA、CPU 回退、实际推理与队列积压。只保存工作阶段和依赖信息，不保存音频或歌词。</p>
+      <div class="btnline"><button id="run-lyrics-diagnostics" type="button">一键全量检测</button><button id="refresh-lyrics-diagnostics" type="button">刷新检测结果</button><button id="prepare-lyrics-model" type="button">准备 / 修复当前档位模型</button></div>
+      <p id="lyrics-model-prepare-status" class="muted" role="status">模型准备未开始；第一次使用当前档位可自动准备，也可手动点击。</p>
+      <p id="lyrics-worker-health" class="muted" role="status">等待获取独立歌词进程的工作阶段…</p>
+      <pre id="lyrics-diagnostics-report" class="muted" style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:320px;overflow:auto;font-size:12px">尚未执行检测</pre>
+    </details>
+    <div class="lyrics-switcher" id="lyrics-song-tabs" aria-label="选择查看当前或上一首歌曲"></div>
+    <div id="live-lyrics-lines" class="lyrics-window" aria-label="当前选择歌曲的歌词候选">
+      <p class="empty">开启系统声音监听并播放有人声的音乐，歌词会逐段出现。</p>
+    </div>
+    <p class="muted" id="lyrics-sharing-state">仅本地显示；AI 读取需要另行授权。</p>
+  </section>
+  <details class="card" id="advanced-files">
+    <summary style="cursor:pointer;font-weight:600;margin-bottom:12px">高级功能：手动分析本地音乐文件（自动监听不需要）</summary>
+    <div>
+    <h2>仅在你需要分析指定文件时使用</h2>
+    <div class="controls">
+      <div><label for="path">本地音乐文件的完整路径（仅限授权的音乐文件夹）</label>
+        <input id="path" type="text" autocomplete="off" placeholder="例如 C:\Users\你\Music\song.mp3" /></div>
+      <button class="primary" id="analyze">♫ 分析整首歌曲</button>
+    </div>
+    <div class="btnline"><button id="scan">扫描授权目录</button><select id="file-list" style="flex:1;min-width:200px"><option value="">选择找到的音乐文件…</option></select><button id="last">查看上次分析</button><button id="listen">听 4 秒当前声音</button></div>
+    <p class="muted" id="roots">仅支持本地 WAV/MP3/FLAC/OGG/M4A；如路径不在授权目录中，请修改插件配置的 music_perception.allowed_roots。</p>
+    <div id="message" class="message" role="status"></div>
+    </div>
+  </details>
+  <div id="result" hidden>
+    <section class="card"><h2 id="track-title">音乐概览</h2>
+      <div class="metrics">
+        <div class="metric"><small>BPM 速度（估计）</small><b id="bpm">—</b></div>
+        <div class="metric"><small id="duration-caption">歌曲时长</small><b id="duration">—</b></div>
+        <div class="metric"><small>调性（粗估）</small><b id="key" style="font-size:15px">—</b></div>
+        <div class="metric"><small>音乐情绪（推测）</small><b id="emotion" style="font-size:16px">—</b></div>
+      </div><div class="note" id="notice"></div>
+    </section>
+    <section class="card"><h2 id="spectrum-title">音乐频谱 · 从低音到高音</h2>
+      <div class="canvasbox"><canvas id="spectrogram" width="980" height="245" aria-label="整首歌曲的时间与频率分布图"></canvas></div>
+      <div class="axis"><span>开头 · 低音 → 高频在纵轴上方</span><span id="spectrum-end">结尾</span></div>
+      <div class="legend"><span><span class="key" style="background:#28375d"></span>弱</span><span><span class="key" style="background:#548dd1"></span>中</span><span><span class="key" style="background:#e8a0b3"></span>强</span><span><span id="spectrum-legend-time">纵向为对数频率，横向为本次分析时间</span></span></div>
+    </section>
+    <div class="grid2">
+      <section class="card"><h2>旋律近似走势</h2><div class="canvasbox"><canvas id="melody" width="640" height="180" aria-label="估计主导音高随时间的变化"></canvas></div>
+        <p class="muted">主导谱峰音高，并非单独分离的人声或真实主旋律；鼓和贝斯可能干扰。</p></section>
+      <section class="card"><h2>节奏与模型信息</h2><div id="meta" class="muted"></div></section>
+    </div>
+    <section class="card"><h2 id="timeline-title">已分析的音乐时间轴 <small class="muted">点击任意段查看该段的节奏和情绪提示</small></h2>
+      <div class="table-wrap"><table><thead><tr><th>时间段</th><th>强度</th><th>节拍数</th><th>局部 BPM</th><th>主导音级</th><th>情绪线索</th></tr></thead><tbody id="segments"></tbody></table></div>
+      <p class="muted" id="selected"></p>
+    </section>
+  </div>
+  <p class="foot">「为她所听」是 AI 感官工具，不会替 AI 对音乐下结论。默认播放设备回环只能获取混合后的实际输出，无法单独排除同一输出中其他应用的音频；非音乐由模型尽力过滤。需授权才能监听或向对话 AI 提供频谱。频谱不等于原始声音；启用感知后，数值矩阵可能交给你配置的云端 AI。关闭监听立即撤销授权，不保存原始录音。</p>
+</main>
+<script>
+'use strict';
+const PLUGIN='music_perception', RUNS='/runs', $ = id=>document.getElementById(id);
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+let report=null, lastReportRevision=null, lastLiveCount=null;
+let lastQualityValue=undefined, lastDeviceValue=undefined;
+let selectedLyricsSongId=null,lastLyricsCurrentId=null,lastLyricsLanguage=null;
+let stagedLyricsQuality=null, modelInventoryBusy=false,modelInventorySnapshot=null;
+const lyricsModelByQuality={low:'tiny',medium:'base',high:'small',ultra:'large-v3-turbo'};
+const lyricsQualityNames={low:'低',medium:'中',high:'高',ultra:'极高'};
+const lyricLanguageLabel={auto:'自动',zh:'中文',ja:'日语',en:'英语'};
+function timeLabel(seconds){
+ const n=Number(seconds);if(!Number.isFinite(n)||n<0)return '--:--';
+ return `${String(Math.floor(n/60)).padStart(2,'0')}:${String(Math.floor(n%60)).padStart(2,'0')}`;
+}
+async function refreshLiveLyrics(){
+ const feed=await call('get_live_lyrics',{},14000);
+ if(!feed.ok)throw Error(feed.error||'无法读取本地歌词');
+ const language=feed.selected_language||'auto';
+ if(lastLyricsLanguage!==language){$('lyrics-language').value=language;lastLyricsLanguage=language}
+ const songs=(feed.songs||[]).slice(-2);
+ if(feed.current_song_id!==lastLyricsCurrentId){
+   lastLyricsCurrentId=feed.current_song_id;
+   selectedLyricsSongId=feed.current_song_id || (songs.at(-1)||{}).id || null;
+ }
+ if(!songs.some(s=>s.id===selectedLyricsSongId))selectedLyricsSongId=(songs.at(-1)||{}).id||null;
+ const state=feed.recognition_status||'waiting';
+ const recognized=lyricLanguageLabel[feed.recognized_language]||feed.recognized_language||'尚未判定';
+ const progressForCurrent=(songs.find(s=>s.id===feed.current_song_id)||{}).recognition_progress||{};
+ const captureInfo=progressForCurrent.captured_until_s>0?
+   `；已提交歌词片段至 ${timeLabel(progressForCurrent.captured_until_s)}，已处理至 ${timeLabel(progressForCurrent.completed_until_s||0)}`:'';
+ const statusNames={collecting_audio:'正在收集已确认的音乐',queued:'歌词片段已入队',
+   transcribing:'模型正在转写歌词',preparing_model:'正在加载/预热歌词模型',
+   asr_hypothesis:'已有歌词文字候选',no_reliable_lyrics:'本段没有可靠歌词',
+   no_singing_detected:'本段音量过低',waiting_for_vocals:'等待确认歌声',
+   model_download_waiting_network:'模型下载失败，等待重试',
+   unavailable:'模型识别失败',interrupted_by_song_switch:'听到中途切歌，取消旧任务'};
+ const h=feed.diagnostic||{};const w=h.worker||{};
+ const working=w.stage?`；独立模型阶段：${w.stage}，已停留 ${Number(w.stage_age_seconds||0).toFixed(0)} 秒`:'';
+ $('lyrics-local-status').textContent=`歌词进度：${statusNames[progressForCurrent.state]||statusNames[state]||state}${captureInfo}；队列 ${Number(feed.queue_depth||0)} 段；语言：${lyricLanguageLabel[language]||language}；模型返回：${recognized}${working}${h.warning?'；注意：'+h.warning:''}${feed.recognition_error?'；原因：'+feed.recognition_error:''}`;
+ $('lyrics-sharing-state').textContent=feed.ai_share_allowed?
+   (feed.ai_context_submitted?'歌词候选已提交 AI 私有上下文；不等于 AI 已阅读或一定会谈论音乐。':'已授权 AI 访问，但当前曲目歌词尚未确认成功提交。'):
+   '仅在本机显示歌词；未授权把歌词交给 AI，AI 自然看不到这些文字。';
+ const tabs=$('lyrics-song-tabs');tabs.replaceChildren();
+ for(const song of songs.slice().reverse()){
+   const btn=document.createElement('button');btn.type='button';
+   const current=song.id===feed.current_song_id;
+   const label=current?'当前歌曲':song.end_reason==='audio_switch_candidate'?'疑似切歌':song.interrupted_early?'中途切走':song.status==='switched'?'切歌记录':'上一首';
+   btn.textContent=`${label} · ${song.title||'未命名歌曲'}`;
+   btn.className=song.id===selectedLyricsSongId?'active':'';
+   btn.setAttribute('aria-pressed',String(song.id===selectedLyricsSongId));
+   btn.onclick=()=>{selectedLyricsSongId=song.id;refreshLiveLyrics().catch(e=>msg(String(e),true))};
+   tabs.appendChild(btn);
+ }
+ const selected=songs.find(s=>s.id===selectedLyricsSongId);
+ const panel=$('live-lyrics-lines');
+ const nearBottom=panel.scrollTop+panel.clientHeight>=panel.scrollHeight-45;
+ const oldScroll=panel.scrollTop;
+ panel.replaceChildren();
+ if(!selected){const empty=document.createElement('p');empty.className='empty';empty.textContent='还没有已监听歌曲，播放音乐后会出现独立歌词记录。';panel.appendChild(empty);return}
+ const cues=(selected.cues||[]).filter(c=>String(c.text_preview||'').trim());
+ const work=selected.recognition_progress||{};
+ const workNames={collecting_audio:'已检测到这首歌，正在累积确认过的音乐音频',
+   queued:'已抓到音频片段，正在等待歌词模型处理',
+   preparing_model:'已抓到音频片段，正在载入歌词模型',
+   transcribing:'已抓到音频片段，正在识别文字',
+   asr_hypothesis:'这段已有识别候选',
+   no_reliable_lyrics:'这段识别结束，但没有得到足够可靠的唱词',
+   no_singing_detected:'这段没有可识别的歌声',
+   model_download_waiting_network:'已抓到音频，但模型文件下载失败，待网络恢复后重试',
+   unavailable:'歌词模型返回错误',
+   interrupted_by_song_switch:'中途切歌，旧歌曲正在处理的片段已取消'};
+ if(!cues.length){
+   const empty=document.createElement('p');empty.className='empty';
+   const range=Number(work.captured_until_s)>0?`（已捕获到 ${timeLabel(work.captured_until_s)}）`:'';
+   empty.textContent=(workNames[work.state]||(selected.current?'等待第一段确认音乐进入歌词模型':'本首暂时没有可靠唱词'))+range;
+   panel.appendChild(empty);
+   if(work.last_error){const reason=document.createElement('p');reason.className='empty';reason.textContent='识别诊断：'+work.last_error;panel.appendChild(reason)}
+   return;
+ }
+ if(work.pending){const pending=document.createElement('p');pending.className='empty';
+   pending.textContent=`已显示识别完成的歌词，后续片段已捕获到 ${timeLabel(work.captured_until_s)}，正在继续识别…`;
+   panel.appendChild(pending)}
+ for(let i=0;i<cues.length;i++){
+   const cue=cues[i];const row=document.createElement('div');row.className='lyric-row';
+   const localTime=Number(cue.at_s||0),mediaTime=cue.player_at_s_estimated==null?NaN:Number(cue.player_at_s_estimated);
+   if(selected.current && i===cues.length-1)row.classList.add('now');
+   const stamp=document.createElement('span');stamp.className='lyric-time';
+   stamp.textContent=timeLabel(Number.isFinite(mediaTime)?mediaTime:localTime);
+   const lyrics=document.createElement('span');lyrics.className='lyric-words';
+   lyrics.textContent=String(cue.text_preview||'');
+   const meta=document.createElement('small');meta.className='lyric-source';
+   const lang=lyricLanguageLabel[cue.language_candidate]||cue.language_candidate||'未知语言';
+   meta.textContent=`${cue.provenance==='user_supplied_local_lrc'?'本地 LRC（播放器进度估算）':'歌声模型候选 · '+lang}`;
+   lyrics.appendChild(meta);row.append(stamp,lyrics);panel.appendChild(row);
+ }
+ if(nearBottom)panel.scrollTop=panel.scrollHeight;else panel.scrollTop=oldScroll;
+}
+
+function msg(text, isError=false){$('message').textContent=text;$('message').className='message'+(isError?' error':'')}
+function unwrap(raw){let cur=raw;for(let i=0;i<10;i++){if(!cur||typeof cur!=='object') break;if(cur.success===false) throw Error(String(cur.error||'插件调用失败'));if(!('data' in cur)) return cur;cur=cur.data}return cur||{}}
+async function call(id,args={},timeout=240000){
+ const resp=await fetch(RUNS,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({plugin_id:PLUGIN,entry_id:id,args})});
+ if(!resp.ok) throw Error(`调用失败（HTTP ${resp.status}）`);
+ const start=await resp.json(),rid=start.run_id||start.id;if(!rid)throw Error('后端未返回任务 ID');
+ const until=Date.now()+timeout;
+ while(Date.now()<until){await sleep(350);const p=await fetch(`${RUNS}/${rid}`);if(!p.ok) continue;
+   const state=await p.json(),st=String(state.status||'').toLowerCase();
+   if(st==='failed'||st==='canceled'||st==='timeout')throw Error(String(state.error||state.message||st));
+   if(st==='succeeded'){
+     const ex=await fetch(`${RUNS}/${rid}/export`);if(!ex.ok)throw Error('无法获取分析结果');
+     const result=await ex.json(),items=Array.isArray(result.items)?result.items:[];
+     for(const it of items){if(it.type==='json'&&it.json)return unwrap(it.json);
+       if(it.type==='text'&&typeof it.text==='string'){try{return unwrap(JSON.parse(it.text))}catch(_){}}}
+     return unwrap(result);
+   }
+ }
+ throw Error('操作等待超时，请在 N.E.K.O 运行记录中查看实际状态。');
+}
+// N.E.K.O 0.9+ 的官方开发注册、构建、安装计划及 CSRF 接口。
+// 即使浏览器不可调用这些端点，也不会安装或绕过 N.E.K.O 的安全流程。
+const INSTALL_TIMEOUT = 20 * 60 * 1000;
+let devRegistration = null;
+function showInstallStep(text, isError=false){
+  $('install-progress').textContent=text;
+  $('install-progress').style.color=isError?'var(--danger)':'var(--mint)';
+}
+async function installApi(path, options={}){
+  const headers={'Accept':'application/json',...(options.headers||{})};
+  if(options.body && !headers['Content-Type'])headers['Content-Type']='application/json';
+  const resp=await fetch(path,{method:options.method||'GET',headers,
+    ...(options.body?{body:JSON.stringify(options.body)}:{})});
+  let payload={};try{payload=await resp.json()}catch(_){ /* show HTTP code instead */ }
+  if(!resp.ok){const error=payload?.detail||payload?.message||payload?.error;
+    const explain=typeof error==='string'?error:JSON.stringify(error||{});
+    throw Error(`N.E.K.O 安装接口 HTTP ${resp.status}：${explain}`);
+  }
+  return payload;
+}
+async function discoverVisualInstall(){
+  try{
+    const state=await installApi('/plugins/development',{headers:{'X-Neko-Development':'1'}});
+    const record=(state.registrations||[]).find(r=>r.plugin_id===PLUGIN);
+    if(!state.enabled || !record)return;
+    devRegistration=record;
+    $('install-card').hidden=false;
+    $('install-details').textContent='开发源码：'+record.source_dir+'。构建依赖仅写入此插件源码目录，安装动作交给 N.E.K.O 插件中心。';
+  }catch(_){/* 已正式安装的普通用户无需看到源码构建向导 */}
+}
+$('visual-install').onclick=()=>safely(async()=>{
+  const button=$('visual-install');
+  if(button.disabled)return;
+  if(!devRegistration){showInstallStep('尚未在「开发」页面加载源码',true);return}
+  if(!confirm('将从网络下载音乐分类模型和 Python 依赖，在当前 N.E.K.O 开发仓库编译并检查。完成后会再次显示正式安装确认。此操作不会开始监听电脑声音。是否继续？'))return;
+  button.disabled=true;
+  try{
+    showInstallStep('第 1/4 步：准备 YAMNet 模型与原生音频依赖…');
+    const ready=await call('prepare_visual_install',{user_confirmed:true},INSTALL_TIMEOUT);
+    if(!ready.ok || !ready.ready)throw Error(ready.error||'本机模型/依赖检查未通过');
+    showInstallStep('第 2/4 步：由 N.E.K.O 构建并校验插件包…');
+    // Build is a protected host-side mutation and must carry CSRF, not just install.
+    const csrf=await installApi('/security/csrf-token');
+    if(typeof csrf.csrf_token!=='string'||!csrf.csrf_token)throw Error('无法获取官方构建授权令牌');
+    const built=await installApi('/plugin-cli/build',{
+      method:'POST',headers:{'X-Neko-Development':'1','X-CSRF-Token':csrf.csrf_token},
+      body:{mode:'single',development_ref:{registration_id:devRegistration.registration_id,revision:devRegistration.revision}}});
+    if(!built.ok || built.built_count!==1 || !built.built?.[0]?.package_path)
+      throw Error((built.failed||[]).map(x=>x.error).join('；')||'官方构建没有返回安装包');
+    const pkg=built.built[0].package_path;
+    const verified=await installApi('/plugin-cli/verify',{method:'POST',body:{package:pkg}});
+    if(verified.ok!==true || verified.payload_hash_verified!==true ||
+       !verified.plugins?.some(p=>p.plugin_id===PLUGIN))
+      throw Error('插件包完整性验证失败，安装已终止');
+    showInstallStep('第 3/4 步：检查首次安装/升级计划…');
+    const plan=await installApi('/plugin-cli/install-plan',{method:'POST',body:{package:pkg}});
+    if(plan.action==='blocked')throw Error(plan.reason||'N.E.K.O 阻止了本次安装');
+    const approval=`N.E.K.O 准备执行：${plan.action}\n插件：${plan.plugin_id}\n当前版本：${plan.current_version||'无'}\n目标版本：${plan.target_version||'未知'}\n${plan.reason||''}\n\n你确定通过官方插件中心安装吗？音乐监听仍需要单独授权。`;
+    if(!confirm(approval)){showInstallStep('已取消正式安装；构建包保留在 N.E.K.O 包管理列表');return}
+    showInstallStep('第 4/4 步：官方安装器正在处理…');
+    const replacing=plan.action!=='install';
+    const installed=await installApi('/plugin-cli/install',{method:'POST',
+      headers:{'X-CSRF-Token':csrf.csrf_token},
+      body:{package:pkg,install_source:'imported',on_conflict:'fail',
+            ...(replacing?{confirm_upgrade:true,confirmation_token:plan.confirmation_token}:{})}});
+    if(!installed.installed_plugin_count)throw Error('安装器未返回已安装插件');
+    showInstallStep('已安装成功，正在解除开发版绑定…');
+    // Only detach a registered development copy; never erase its source files.
+    try{
+      await installApi('/plugins/development/registrations/'+encodeURIComponent(devRegistration.registration_id)
+        +'?revision='+encodeURIComponent(String(devRegistration.revision)),
+        {method:'DELETE',headers:{'X-Neko-Development':'1','X-CSRF-Token':csrf.csrf_token}});
+      devRegistration=null;
+      $('install-card').hidden=true;
+    }catch(error){
+      $('install-details').textContent='已成功安装，开发源码仍保持加载状态：请在「开发」页面手动移除开发注册。'+error.message;
+    }
+    // Starting the installed plugin is distinct from authorizing audio capture.
+    // The lifecycle will use saved consent if and only if the user has enabled it previously.
+    let startWarning='';
+    if(devRegistration===null){
+      try{
+        await installApi('/plugin/'+encodeURIComponent(PLUGIN)+'/start',{
+          method:'POST',headers:{'X-CSRF-Token':csrf.csrf_token}});
+      }catch(error){startWarning='（自动启动未确认；可在插件列表中点击「启动」）'}
+    }else{
+      startWarning='（开发注册尚未移除，请在「开发」页面处理后启动正式插件）';
+    }
+    msg('「为她所听」已通过 N.E.K.O 官方插件中心安装'+startWarning+'。首次监听还需要你单独授权。');
+    showInstallStep('安装成功'+startWarning+' · 音乐监听需授权');
+  }catch(e){
+    showInstallStep('安装未完成：'+(e.message||String(e)),true);
+    msg('可视化安装未完成：'+(e.message||String(e)),true);
+  }finally{button.disabled=false}
+});
+void discoverVisualInstall();
+function timeText(s){if(!Number.isFinite(Number(s)))return'--:--';return `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`}
+function metric(id,value){$(id).textContent=String(value)}
+function spectralColor(p){let x=Math.max(0,Math.min(1,p/100));if(x<0.44) return `hsl(${224-x*60} 37% ${12+x*73}%)`;if(x<0.72)return `hsl(${214-(x-.44)*180} 64% ${30+(x-.44)*90}%)`;return `hsl(${164+(x-.72)*270} 80% ${50+(x-.72)*95}%)`}
+function drawLiveBands(bands){
+ const el=$('live-bands'); el.replaceChildren();
+ for(const value of Array.isArray(bands)?bands.slice(0,16):Array(16).fill(0)){
+   const bar=document.createElement('span');bar.className='spark-band';
+   bar.style.height=`${Math.max(2,Math.min(100,Number(value)||0))}%`;
+   el.append(bar);
+ }
+}
+function drawSpectrum(r){let grid=r.spectrum.rows_low_to_high, cvs=$('spectrogram'),c=cvs.getContext('2d');
+ const rows=grid.length,cols=grid[0].length; c.clearRect(0,0,cvs.width,cvs.height);
+ const cw=cvs.width/cols,ch=cvs.height/rows;
+ for(let row=0;row<rows;row++){for(let i=0;i<cols;i++){c.fillStyle=spectralColor(grid[row][i]);c.fillRect(Math.floor(i*cw),Math.floor((rows-row-1)*ch),Math.ceil(cw+.1),Math.ceil(ch+.1))}}
+ c.strokeStyle='rgba(255,255,255,.12)';c.lineWidth=1;
+ for(let i=1;i<4;i++){const x=cvs.width*i/4;c.beginPath();c.moveTo(x,0);c.lineTo(x,cvs.height);c.stroke()}
+ $('spectrum-end').textContent=timeText(r.duration_s)+(r.capture?.streaming?' · 本片段结束':' · 结尾');
+}
+function drawMelody(r){const c=$('melody').getContext('2d'),can=$('melody'),pts=r.melody.points_every_2s;
+ c.clearRect(0,0,can.width,can.height);c.fillStyle='#0c1728';c.fillRect(0,0,can.width,can.height);
+ c.strokeStyle='#324462';c.lineWidth=1;for(let i=0;i<=4;i++){c.beginPath();c.moveTo(0,i*can.height/4);c.lineTo(can.width,i*can.height/4);c.stroke()}
+ const valid=pts.filter(x=>x.midi!==null);if(!valid.length)return;
+ const lo=Math.max(30,Math.min(...valid.map(x=>x.midi))-3),hi=Math.min(95,Math.max(...valid.map(x=>x.midi))+3),range=Math.max(12,hi-lo);
+ c.lineWidth=2.8;c.strokeStyle='#91d9ff';c.lineCap='round';c.beginPath();let active=false;
+ for(const p of pts){if(p.midi===null){active=false;continue}const x=p.t/r.duration_s*can.width,y=can.height-(p.midi-lo)/range*can.height;
+   if(!active){c.moveTo(x,y);active=true}else c.lineTo(x,y)}c.stroke();
+}
+function drawSegments(r){$('segments').replaceChildren();r.segments.forEach((s,i)=>{
+ const tr=document.createElement('tr');const fields=[`${timeText(s.start_s)}–${timeText(s.end_s)}`, null,s.beats,s.local_bpm||'—',s.top_pitch_classes.join(' · '),s.emotion_model?.label||s.mood_cue];
+ fields.forEach((val,j)=>{const td=document.createElement('td');if(j===1){const bar=document.createElement('span');bar.className='bar';bar.style.width=`${Math.max(3,s.energy*100)}px`;td.append(bar);td.append(` ${Math.round(s.energy*100)}%`)}else td.textContent=String(val);tr.append(td)});
+ tr.addEventListener('click',()=>{document.querySelectorAll('#segments tr').forEach(x=>x.classList.remove('selected'));tr.classList.add('selected');$('selected').textContent=`${timeText(s.start_s)} – ${timeText(s.end_s)}：局部 BPM ${s.local_bpm||'无法确认'}，频谱重心 ${s.spectral_centroid_hz} Hz，低音能量占比 ${Math.round(s.bass_share*100)}%。该段情绪：${s.emotion_model?.label||s.mood_cue}（仅为算法推测）。`});
+ $('segments').append(tr)})}
+function render(r){report=r;$('result').hidden=false;
+ const live=Boolean(r.capture?.streaming);
+ const c=r.capture||{};
+ metric('track-title',live?`♫ 系统音乐 · 第 ${c.part_index||1} 段（${timeText(c.offset_s||0)}–${timeText(c.end_s||0)}）`:`♫ ${r.file_name}`);
+ $('spectrum-title').textContent=live?'实时音乐片段频谱 · 从低音到高音':'整首歌曲频谱 · 从低音到高音';
+ $('timeline-title').textContent=live?'本次音乐片段的局部时间轴':'完整音乐文件分段时间轴';
+ metric('bpm',r.rhythm.bpm_estimate?r.rhythm.bpm_estimate:'不确定');metric('duration',timeText(r.duration_s));metric('key',r.harmony.estimated_key.name);metric('emotion',r.emotion.label);
+ const method=r.emotion.method==='essentia_vggish_pretrained'?'Essentia 预训练分类':'快速启发式（低置信度）';
+ $('notice').textContent=`${live?'这是系统实时听到的音乐分段，不是整首歌曲：':''}${r.emotion.notice||''} 注意：歌曲情绪也可能随段落、听者感受和歌词而变化。`;
+ $('meta').textContent=`识别到 ${r.rhythm.beat_count} 个节拍 · 节拍规律度 ${(r.rhythm.beat_regularity*100).toFixed(0)}% · 分成 ${r.segments.length} 段 · 情绪方法：${method} · ${live?'系统回环音频局部分析':'完整音频文件分析'} · 引擎用时 ${r.elapsed_seconds} 秒`;
+ drawSpectrum(r);drawMelody(r);drawSegments(r);}
+async function safely(action){try{await action()}catch(e){msg(e.message||String(e),true)}}
+$('analyze').onclick=()=>safely(async()=>{const path=$('path').value.trim();if(!path){msg('请先输入路径或从列表选择歌曲',true);return}const btn=$('analyze');btn.disabled=true;btn.textContent='分析中…';msg('正在本地分析整个音轨（首次使用需初始化信号处理库）');try{
+ const a=await call('analyze_song',{path,detail:'brief'});if(!a.ok)throw Error(a.error||'未知错误');
+ const b=await call('get_last_report',{},20000);if(!b.ok)throw Error(b.error||'无法读取频谱');render(b.report);msg(a.cache_hit ? `已读取该歌曲的缓存结果（原分析用时 ${b.report.elapsed_seconds}s）` : `整首歌已分析完成（${b.report.elapsed_seconds}s）`);
+ }finally{btn.disabled=false;btn.textContent='♫ 分析整首歌曲'}});
+$('last').onclick=()=>safely(async()=>{const out=await call('get_last_report',{},20000);if(!out.ok)throw Error(out.error||'无保存结果');render(out.report);msg('已恢复最近一段实时音乐或文件分析报告')});
+$('scan').onclick=()=>safely(async()=>{msg('正在搜索授权目录…');const r=await call('scan_music',{},30000);if(!r.ok)throw Error(r.error||'搜索失败');const s=$('file-list');s.replaceChildren();const first=document.createElement('option');first.value='';first.textContent=`已找到 ${r.files.length} 首歌，选择文件…`;s.append(first);
+ for(const f of r.files){const o=document.createElement('option');o.value=f.path;o.textContent=f.file_name;s.append(o)}msg(`已找到 ${r.files.length} 首授权歌曲`)});
+$('file-list').onchange=()=>{if($('file-list').value)$('path').value=$('file-list').value};
+$('listen').onclick=()=>safely(async()=>{msg('正在检测当前播放的声音（仅采集4秒）…');const r=await call('listen_now',{duration:4},30000);if(!r.ok)throw Error(r.error||'当前声音不可用');const d=r.audio;msg(`当前声音：${d.interpretation||'有声音'}。这是4秒频谱快照，不是整首歌分析。`)});
+async function refreshMonitor(){
+ const r=await call('get_status',{},20000);if(!r.ok)throw Error(r.error||'读取监听状态失败');
+ const quality=r.lyrics_quality||null;
+ if(stagedLyricsQuality===null&&(lastQualityValue===undefined||lastQualityValue!==quality)){
+   $('lyrics-quality').value=quality||'medium';lastQualityValue=quality;
+ }
+ $('lyrics-quality-status').textContent=quality?({low:'低档 · 已保存',medium:'中档 · 已保存',high:'高档 · 已保存',ultra:'极高档 · 已保存'}[quality]):'首次使用请选择';
+ if(!stagedLyricsQuality) $('lyrics-quality-help').textContent=quality?'已启用的模型将继续运行；可以选择其他档位先下载验证。':'请先选择一个档位，完成下载、SHA 校验和试推理后才能启用。';
+ const dev=['cuda','auto'].includes(r.lyrics_device_preference)?'cuda':'cpu';
+ if(lastDeviceValue===undefined||lastDeviceValue!==dev){$('lyrics-device').value=dev;lastDeviceValue=dev}
+ const actual=r.lyrics_runtime_device;
+ const devLabel=dev==='cuda'?'NVIDIA GPU':'CPU';
+ const runLabel=actual==='cuda'?'NVIDIA GPU':actual==='cpu'?'CPU':'待首次歌词推理确认';
+ const info=r.lyrics_gpu_probe;
+ const switching=r.lyrics_switch||{};
+ const switchText=switching.status==='preparing'?'新配置正在预热，旧模型继续工作：'+(switching.quality||'')+'/'+(switching.device||''):
+    switching.status==='failed'?'切换失败，已保留旧模型：'+(switching.message||''):
+    switching.status==='ready'?'新模型已完成预热与切换':'';
+ if(switchText){$('lyrics-quality-help').textContent=switchText;}
+
+ $('lyrics-device-status').textContent=`选择：${devLabel}；实际：${runLabel}${r.lyrics_device_warning?'；'+r.lyrics_device_warning:''}${switchText?'；'+switchText:''}`;
+ $('lyrics-device-help').textContent=(info&&info.message?info.message+' ':'')+'显卡检测只能预估兼容性；如果 CUDA 不可用会在状态里明确显示回退 CPU。';
+ const e=r.environment||{};
+ $('env-state').textContent=e.ready?(e.model_ready?'音频环境就绪（歌词模型另行检查）':'分析库就绪'):(e.phase==='installing'?'安装中':e.phase==='failed'?'修复失败':e.phase==='waiting'?'等待启动':'检测中');
+ $('env-message').textContent=e.stage||'正在检查';
+ $('env-detail').textContent=`缺少：${(e.missing||[]).join('、')||'未检测到缺失'}；修复次数：${e.repair_attempts||0}；Python：${e.python_runtime||'自动选择'}；安装器：${e.installer||'自动选择'}${e.vendor_path?'；实际依赖目录：'+e.vendor_path:''}${e.error?'；问题：'+e.error:''}`;
+ const diagnostic=[e.error_details||'',e.diagnostics_path?'本地诊断日志：'+e.diagnostics_path:''].filter(Boolean).join('\n');
+ $('env-diagnostics-box').hidden=!diagnostic;
+ $('env-diagnostics').textContent=diagnostic;
+ $('retry-env').disabled=['checking','installing'].includes(e.phase);
+ const l=r.live||{};const running=l.status==='listening'||l.status==='starting';
+ const st=r.plugin_paused ? '插件已暂停（歌词进程已停止）' : (r.monitor_enabled ? (l.capturing_music?'正在捕获音乐':running?'正在监听 · 只处理音乐':l.status==='error'?'启动失败':'已授权'):'未开启');
+ $('monitor-status').textContent=st;
+ $('monitor-details').textContent=`系统默认输出：${l.device||"未连接"}；${l.status==='listening'?'正在监听':l.status||'stopped'}；当前：${l.last_decision||'尚未检测'}；AI 事件：${r.auditory_context_ready?'已准备':'等待音乐'}${l.error?'；错误：'+l.error:''}${r.monitor_start_error?'；启动问题：'+r.monitor_start_error:''}${r.live_last_error?'；处理错误：'+r.live_last_error:''}${r.live_last_error&&r.analysis_diagnostics_path?'；分析诊断：'+r.analysis_diagnostics_path:''}；歌词识别：${({'preparing_model':'正在校验或下载歌词模型（文件大小依所选档位而定）','model_download_waiting_network':'模型下载未完成，稍后重试','queued':'等待识别','transcribing':'正在识别歌声','asr_hypothesis':'已有候选歌词','no_reliable_lyrics':'暂未识别到可靠歌词'}[r.lyrics_status]||r.lyrics_status||'待机')}；歌词档位：${({'low':'低','medium':'中','high':'高','ultra':'极高'})[r.lyrics_quality]||'未选择'}；运行设备：${r.lyrics_runtime_device==='cuda'?'GPU':r.lyrics_runtime_device==='cpu'?'CPU':'待推理'}；缓存复用：${r.live_cache_reuses||0} 段；已识别片段：${r.lyrics_completed||0}${r.lyrics_last_error?'；歌词识别诊断：'+r.lyrics_last_error:''}${r.current_neko_playlist_track?'；媒体曲目：'+r.current_neko_playlist_track:''}${r.player_metadata_source?'（'+r.player_metadata_source+'）':''}；歌曲摘要保留：${(r.recent_songs||[]).length}/2${r.player_local_lrc_available?'；有已授权本地同步歌词':''}${l.audio_track_change_candidates?'；音频变歌候选：'+l.audio_track_change_candidates:''}`;
+ metric('live-level',Number.isFinite(l.input_level_dbfs)?`${l.input_level_dbfs} dBFS`:'—');
+ drawLiveBands(l.spectrum_bands_0_100);
+ metric('live-score',Number.isFinite(l.last_music_score)?`${Math.round(l.last_music_score*100)}%`:'—');
+ metric('live-heard',`${Math.round(Number(l.audio_seconds_received||0))} 秒`);
+ metric('live-analyzed',`${r.live_reports_completed||0} 段`);
+ $('live-progress').value=Number(l.segment_progress_pct||0);
+ $('live-progress-label').textContent=l.capturing_music?`正在采集音乐的时频变化：${l.pending_music_seconds||0} / ${l.progress_target_seconds||20} 秒；完成后进入 AI 感知上下文`:
+   running?'系统声音检测中：非音乐不进入分析（每约 2 秒更新）':'尚未启用声音捕获';
+ const recent=(r.live_recent_segments||[]).slice(-3);
+ $('live-timeline').textContent=recent.length?`最近 ${recent.length} 段音乐已转换成时间事件；${r.ai_delivery_enabled?(r.auditory_context_last_delivery_error?'AI 共享尚未确认：'+r.auditory_context_last_delivery_error:'已授权静默交给对话 AI，不强制回复'):'尚未授权向 AI 共享事件'}。`:
+   '歌词约 6 秒后开始尝试识别，节奏事件约 10 秒后生成；非音乐跳过。';
+ const completed=Number(r.live_reports_completed||0);
+ if(lastLiveCount===null){lastLiveCount=completed}
+ else if(completed>lastLiveCount){
+   lastLiveCount=completed;
+   msg('已更新系统音乐时间事件'+(r.ai_delivery_enabled?'，供 AI 静默参考':'；当前未向 AI 共享')+'，不会自动发言');
+ }
+ $('auto-ai').checked=Boolean(r.ai_delivery_enabled);$('auto-ai').disabled=!r.monitor_enabled;
+ $('start-monitor').disabled=!quality||Boolean(r.monitor_enabled&&running&&!r.plugin_paused);$('stop-monitor').disabled=!r.monitor_enabled;
+ $('pause-plugin').disabled=!r.monitor_enabled||Boolean(r.plugin_paused);$('resume-plugin').disabled=!r.monitor_enabled||!r.plugin_paused;
+ const list=$('recent-song-list');list.replaceChildren();
+ for(const item of (r.recent_songs||[]).slice(-2).reverse()){
+   const p=document.createElement('p');
+   const current=item.id===r.current_song_id;
+   p.textContent=`${current?'正在听：':'上一首：'}${item.title||'未命名歌曲'} · 已听 ${item.play_count||1} 次 · 歌词 ${item.lyrics_cue_count||0} 条 · 已缓存音乐分段 ${item.cached_segment_count||0} 段${current&&r.song_replay?' · 正在复用已有分析':''}`;
+   list.appendChild(p);
+ }
+ if(!(r.recent_songs||[]).length)list.textContent='还没有歌曲记录；仅保存两首的结构化事件，不保存原始声音。';
+ if(lastReportRevision===null){lastReportRevision=r.report_revision||0}
+ else if(r.report_revision && r.report_revision!==lastReportRevision){
+   lastReportRevision=r.report_revision;
+ }
+ return r;
+}
+function prettyBytes(n){
+ const v=Number(n);if(!Number.isFinite(v)||v<=0)return '0 MiB';
+ return (v/1048576).toFixed(1)+' MiB';
+}
+async function refreshModelCatalog(){
+ if(modelInventoryBusy)return;
+ modelInventoryBusy=true;
+ try{
+  const response=await call('get_lyrics_model_catalog',{},14000);
+  if(!response.ok)throw Error(response.error||'无法读取模型档位');
+  modelInventorySnapshot=response;
+  const names={missing:'未下载',incomplete:'下载不完整',unreadable:'文件不可读',
+               present_unverified:'存在文件，待 SHA 校验',verified:'SHA 已通过',
+               downloading:'正在下载',verifying:'正在 SHA 校验'};
+  const container=$('lyrics-tier-inventory');container.replaceChildren();
+  for(const quality of ['low','medium','high','ultra']){
+   const model=lyricsModelByQuality[quality];const rec=(response.models||{})[model]||{};
+   const line=document.createElement('div');
+   line.textContent=`${lyricsQualityNames[quality]} · ${model}：${names[rec.state]||rec.state||'未检查'}${rec.prepare_failed?'（上次失败：'+String(rec.message||'请重试').slice(0,130)+'）':''}`;
+   container.appendChild(line);
+  }
+  const chosen=stagedLyricsQuality||$('lyrics-quality').value;
+  const rec=(response.models||{})[lyricsModelByQuality[chosen]]||{};
+  const bar=$('lyrics-model-download-progress');const label=$('lyrics-model-download-label');
+  const panel=$('lyrics-model-transfer-panel');
+  const bytes=Number(rec.received_bytes||0),estimate=Number(rec.expected_bytes_estimate||0);
+  const verified=rec.sha256_verified===true&&rec.state==='verified';
+  // Keep SHA verification and failed / interrupted transfers visible. A
+  // failed 99% request must never vanish without explaining what happened.
+  const active = ['downloading','verifying'].includes(rec.state);
+  const failed = rec.prepare_failed===true || ['failed','interrupted'].includes(rec.state);
+  panel.hidden=!(active||failed);
+  bar.value=0; // never an indeterminate half-filled bar at zero bytes
+  const pct=bytes>0&&estimate>0?Math.max(0,Math.min(99,Math.floor(bytes*100/estimate))):0;
+  const source=rec.source_name||'公开模型源';
+  const age=rec.updated_at?Math.max(0,Math.floor(Date.now()/1000-Number(rec.updated_at))):0;
+  const title=$('lyrics-model-transfer-title');
+  if(active){
+    bar.value=pct;
+    if(rec.state==='verifying'){
+      title.textContent='模型校验中';
+      label.textContent=`${lyricsModelByQuality[chosen]} · 已写入 ${prettyBytes(bytes)}；正在核验完整性和 SHA-256（${pct}% 为大小估算，不代表校验结果）`;
+    }else{
+      title.textContent='模型下载中';
+      label.textContent=`${lyricsModelByQuality[chosen]} · ${source} · ${bytes>0?'已写入 '+prettyBytes(bytes):'正在连接／等待首批数据'}`+
+          (estimate>0?` / 预估 ${prettyBytes(estimate)}（约 ${pct}%，未校验）`: '')+
+          (age>45?`；${age} 秒未收到进度更新，请检查网络，已下载数据会尽量保留`: '');
+    }
+  }else if(failed){
+    title.textContent='模型下载未完成 · 已保存进度';
+    bar.value=pct;
+    label.textContent=`${lyricsModelByQuality[chosen]} · ${bytes>0?'已保留 '+prettyBytes(bytes):'尚未收到完整权重'}`+
+          (estimate>0?` / 预估 ${prettyBytes(estimate)}（约 ${pct}%，未通过 SHA）`: '')+
+          `；${String(rec.message||'连接中断或校验失败').slice(0,260)}。可点击「检查 / 继续下载所选模型」重试。`;
+  }
+  const inSwitch=response.switch?.status==='preparing';
+  const apply=$('activate-lyrics-model');
+  apply.disabled=!verified||!!response.paused||inSwitch;
+  $('lyrics-model-activate-status').textContent=inSwitch?
+     '正在加载新模型并做试推理；成功后自动切换，原档位继续工作':
+     verified?'文件校验已通过；点下一步进行 CPU／CUDA 加载与试推理':
+     '权重未通过 SHA-256；下一步已锁定';
+  if(response.switch?.status==='ready'){
+     $('lyrics-model-activate-status').textContent='新模型试推理已通过并启用';
+     if(stagedLyricsQuality===response.active_quality)stagedLyricsQuality=null;
+  }else if(response.switch?.status==='failed'){
+     $('lyrics-model-activate-status').textContent='新模型试推理失败，旧档位保持不变：'+String(response.switch.message||'请检查 CUDA');
+  }
+ }finally{modelInventoryBusy=false}
+}
+async function beginModelStage(quality){
+ if(!lyricsModelByQuality[quality])throw Error('档位无效');
+ if(quality==='ultra'&&!confirm('极高档约 1.62 GB。若本机尚未有完整权重，选择后将尝试下载；之后必须再通过 SHA 和试推理才能启用。继续吗？'))return;
+ stagedLyricsQuality=quality;
+ const res=await call('stage_lyrics_model',{quality,download_source:$('lyrics-download-source').value},18000);
+ if(!res.ok)throw Error(res.error||'无法开始下载');
+ msg(res.already_running?'该模型已在准备中':res.queued_for_switch?'已排队切换下载任务':'已开始检测／准备选中的模型；原歌词模型保持不变');
+ await refreshModelCatalog();
+}
+$('lyrics-quality').onchange=()=>safely(()=>beginModelStage($('lyrics-quality').value));
+$('save-lyrics-quality').onclick=()=>safely(()=>beginModelStage($('lyrics-quality').value));
+$('activate-lyrics-model').onclick=()=>safely(async()=>{
+ const quality=stagedLyricsQuality||$('lyrics-quality').value;
+ const device=$('lyrics-device').value;
+ const button=$('activate-lyrics-model');button.disabled=true;
+ try{
+  const r=await call('activate_verified_lyrics_model',{quality,device},65000);
+  if(!r.ok)throw Error(r.error||'新模型尚未通过校验');
+  msg(r.switch_status==='ready'?'当前模型已完成加载和推理':'正在独立加载并用测试音频验证新模型；旧模型不会被中断');
+  await refreshModelCatalog();
+ }finally{await refreshModelCatalog()}
+});
+$('save-lyrics-language').onclick=()=>safely(async()=>{
+ const language=$('lyrics-language').value;
+ const response=await call('set_lyrics_language',{language},20000);
+ if(!response.ok)throw Error(response.error||'未能保存歌词识别语言');
+ lastLyricsLanguage=null;
+ msg('歌词识别语言已更新；下一个歌声片段将使用新的设置，不需要重新下载权重。');
+ await refreshLiveLyrics();
+});
+$('save-lyrics-device').onclick=()=>safely(async()=>{
+ const device=$('lyrics-device').value;
+ if(!['cpu','cuda'].includes(device))throw Error('请选择 CPU 或 NVIDIA GPU');
+ msg('已选择待验证的'+(device==='cuda'?'CUDA GPU':'CPU')+'；请点击「下一步：验证加载并启用」，实际推理成功后才会保存设备。');
+ await refreshModelCatalog();
+});
+async function refreshLyricsDiagnostics(){
+ const response=await call('get_lyrics_diagnostics',{},18000);
+ if(!response.ok)throw Error(response.error||'无法读取歌词诊断');
+ const runtime=response.runtime||{}, worker=runtime.worker||{}, scan=response.self_check||{};
+ const stages=(response.recent_stages||[]).slice(-12);
+ const label={importing_dependencies:'导入歌词运行依赖',checking_model:'核对或下载模型文件',loading_cuda:'正在初始化 GPU',loading_cpu:'正在初始化 CPU',decoding:'正在进行真正的歌词推理',preflight:'模型试推理',model_reused:'模型已复用',completed:'本次任务完成',failed:'子进程任务失败'};
+ $('lyrics-worker-health').textContent=`子进程：${runtime.child_running?'运行中':'未运行'}；模型已实际验证：${runtime.model_loaded_and_tested?'是':'否'}；选择：${runtime.requested_device||'cpu'}；实际：${runtime.actual_device||worker.actual_device||'尚待确认'}；队列：${runtime.queue_depth||0}；当前阶段：${label[worker.stage]||worker.stage||'尚无任务'}${worker.stage_age_seconds!=null?' · '+worker.stage_age_seconds+' 秒':''}${runtime.warning?'；注意：'+runtime.warning:''}`;
+ const lines=[`检测任务：${(response.self_check_state||{}).state||'idle'}${(response.self_check_state||{}).full_inference_skipped_due_to_active_worker?'（歌词进程或模型准备任务占用中，未重复加载；不代表模型已就绪）':''}`];
+ const audio=response.audio_pipeline||{};
+ const prep=response.model_preparation||{};
+ const stateNames={idle:'等待准备',queued:'等待后台准备',running:'正在检查／下载／校验模型',ready:'模型已校验完整',failed:'准备失败',timeout:'准备超时',interrupted:'后台任务已中断',stale:'模型文件已失效',unknown:'模型文件状态待检测'};
+ $('lyrics-model-prepare-status').textContent=`当前档位权重：${stateNames[prep.state]||prep.state||'待检查'}${prep.model?' · '+prep.model:''}${prep.message?'；'+prep.message:''}；此处仅表示文件校验，不代表 GPU 已成功推理。`;
+ lines.push(`系统回环：${audio.capture_status||'未知'} · 设备：${audio.output_device||'未知'} · 已收到 ${audio.captured_seconds||0} 秒；YAMNet 判定：${audio.music_decision||'未知'} · 音乐分数：${audio.music_score??'—'}`);
+ const gateReasons={input_too_quiet:'声音电平过低或近乎静音（没有执行音乐分类）',insufficient_samples:'音频长度不足',invalid_pcm:'音频采样无效',invalid_model_output:'YAMNet 输出无效',classified_as_other_audio:'已有声音，但 YAMNet 未确认音乐',confirmed_music:'已确认音乐',not_started:'尚未运行分类'};
+ lines.push(`实际回环电平：${audio.input_level_dbfs??'—'} dBFS；音乐门控原因：${gateReasons[audio.gate_reason]||audio.gate_reason||'未知'}；人声得分：${audio.speech_score??'—'}`);
+ if(audio.top_class_index!=null)lines.push(`YAMNet 最强类别索引：${audio.top_class_index}，得分：${audio.top_class_score??'—'}（仅诊断，不是歌曲结论）`);
+ if(audio.capture_status==='listening'&&Number(audio.music_score)===0){
+    lines.push('排查提示：若输出设备为 ToDesk Virtual Audio，请确认 Windows 默认输出确实是你听歌所用的设备；如音量接近静音，请先检查系统输出路由。不会自动切到麦克风。');
+ }
+ lines.push(`音频环境：${audio.dependency_environment_ready?'可用':'未就绪'} · YAMNet 权重：${audio.music_gate_model_ready?'可用':'未就绪'}；音乐事件：${audio.event_segments_completed||0} 段；分析队列：${audio.analysis_queue_depth||0} 段`);
+ if(audio.analysis_error_type)lines.push('音乐分析错误：'+audio.analysis_error_type);
+ if(scan.stage)lines.push(`检测阶段：${scan.stage}；运行耗时：${scan.elapsed_seconds||0} 秒`);
+ const health={needs_attention:'环境或模型尚不完整',inference_failed:'实际试推理失败',not_fully_tested:'基础检查完成，尚未完整试推理',verified_cuda:'GPU 完整试推理已通过',verified_cpu:'CPU 完整试推理已通过'};
+ if(scan.health)lines.push(`诊断结论：${health[scan.health]||scan.health}（检查完成不等于运行正常）`);
+ if(scan.python_version)lines.push(`独立 Python：${scan.python_version}；64 位：${scan.python_64bit}`);
+ if(scan.gpu_name)lines.push(`显卡：${scan.gpu_name}；驱动：${scan.nvidia_driver||'未知'}；可用显存：${scan.gpu_free_mib??'未知'} MiB`);
+ if(scan.cuda_candidate!==undefined)lines.push(`CTranslate2 CUDA FP16 候选：${scan.cuda_candidate?'是':'否'}`);
+ if(scan.weight_files_present!==undefined)lines.push(`当前档模型文件：${scan.weight_files_present?'已找到（仍需 SHA 和实际加载）':'未找到或不完整'}；来源：${scan.model_cache_origin||'未知'}${scan.model_missing_items?.length?'；待补文件：'+scan.model_missing_items.join(', '):''}`);
+ if(scan.actual_test_device)lines.push(`合成静音实际推理：${scan.actual_test_device} 成功`);
+ for(const x of (scan.steps||[]))lines.push(`[${x.status}] ${x.stage}${x.note?' · '+x.note:''}`);
+ if(stages.length)lines.push('——最近工作阶段——',...stages.map(x=>`${x.stage} · ${x.requested_device||'未知'}→${x.actual_device||'待确认'} · ${x.error_type||'无错误'}`));
+ lines.push('本机诊断文件：'+(response.report_path||'未知'), '阶段日志：'+(response.stage_log_path||'未知'));
+ $('lyrics-diagnostics-report').textContent=lines.join('\n');
+}
+$('prepare-lyrics-model').onclick=()=>safely(async()=>{
+ const btn=$('prepare-lyrics-model');btn.disabled=true;
+ try{
+  const r=await call('prepare_lyrics_model',{},20000);
+  if(!r.ok)throw Error(r.error||'暂时无法准备模型');
+  msg(r.already_running?'当前档位模型已经在后台准备；请等候。':r.started?'已启动独立模型校验／下载；不必等待 YAMNet 首先确认音乐。':'已存在可用的歌词模型进程');
+  await refreshLyricsDiagnostics();
+ }finally{btn.disabled=false}
+});
+$('run-lyrics-diagnostics').onclick=()=>safely(async()=>{
+ const button=$('run-lyrics-diagnostics');button.disabled=true;
+ try{
+  const result=await call('run_lyrics_diagnostics',{},20000);
+  if(!result.ok)throw Error(result.error||'无法启动诊断');
+  msg(result.already_running?'已有检测正在运行':'一键全量检测已启动；若歌词模型正忙将先进行无冲突环境检测');
+  await refreshLyricsDiagnostics();
+ }finally{button.disabled=false}
+});
+$('refresh-lyrics-diagnostics').onclick=()=>safely(refreshLyricsDiagnostics);
+setInterval(()=>{if(!document.hidden&&$('lyrics-diagnostics-panel').open)safely(refreshLyricsDiagnostics)},4500);
+$('check-lyrics-gpu').onclick=()=>safely(async()=>{
+ const btn=$('check-lyrics-gpu');btn.disabled=true;
+ try{
+  const r=await call('check_lyrics_gpu',{},25000);
+  if(!r.ok)throw Error(r.message||'请先等待歌词运行环境就绪');
+  msg(r.message||'显卡检测已结束',!r.cuda_candidate);
+  await refreshMonitor();
+ }finally{btn.disabled=false}
+});
+$('retry-env').onclick=()=>safely(async()=>{const r=await call('repair_environment',{},30000);if(!r.ok)throw Error(r.error||'无法开始修复');msg('已经开始自动检查环境，页面会显示实时进度');await refreshMonitor()});
+$('start-monitor').onclick=()=>safely(async()=>{
+ if(!confirm('你同意仅监听这台电脑正在播放的扬声器声音吗？授权会保留到你点击停止；原始声音不上传，只有单独开启静默感知，才会把结构化音乐事件提供给你的对话 AI。'))return;
+ const r=await call('start_auto_listen',{consent:true},30000);if(!r.ok)throw Error(r.error||'无法开启监听');msg('已授权，正在启动系统音频回环监听');await refreshMonitor();
+});
+$('pause-plugin').onclick=()=>safely(async()=>{const r=await call('pause_plugin',{},30000);if(!r.ok)throw Error(r.error||'暂停失败');msg(r.release_status==='subprocess_exit_confirmed'?'插件已暂停，歌词子进程已退出并释放其显存':'插件已暂停，仍有子进程待清理');await refreshMonitor()});
+$('resume-plugin').onclick=()=>safely(async()=>{const r=await call('resume_plugin',{},30000);if(!r.ok)throw Error(r.error||'恢复失败');msg('插件监听已恢复；模型将按需从缓存加载');await refreshMonitor()});
+$('stop-monitor').onclick=()=>safely(async()=>{const r=await call('stop_auto_listen',{},30000);if(!r.ok)throw Error(r.error||'停止失败');msg('已停止并撤销自动监听授权');await refreshMonitor()});
+$('refresh-monitor').onclick=()=>safely(refreshMonitor);
+$('auto-ai').onchange=()=>safely(async()=>{const r=await call('set_ai_delivery',{enabled:$('auto-ai').checked},20000);if(!r.ok)throw Error(r.error||'设置失败');msg(r.ai_delivery_enabled?'AI 可在下一次自然对话中读取音乐时间事件，不会自动发表消息':'已暂停向 AI 共享音乐事件');await refreshMonitor()});
+safely(refreshModelCatalog);
+setInterval(()=>{if(!document.hidden)safely(refreshModelCatalog)},3500);
+safely(refreshLiveLyrics);
+setInterval(()=>{if(!document.hidden)safely(refreshLiveLyrics)},2000);
+safely(async()=>{const r=await refreshMonitor();if(r.ok&&r.allowed_roots)$('roots').textContent=`可读取的音乐目录：${r.allowed_roots.join('；')||'暂无'}。模式：${r.mode}；每 ${r.segment_seconds} 秒一段。`});
+setInterval(()=>{if(!document.hidden)safely(refreshMonitor)},5000);
+</script>
+</body>
+</html>
