@@ -5,6 +5,7 @@ aligned to the user's Windows player. Song metadata and capture timing have
 to be correctly anchored before using LRC against live loopback audio.
 """
 from __future__ import annotations
+
 import re
 from pathlib import Path
 

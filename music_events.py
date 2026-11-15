@@ -60,8 +60,8 @@ def harmonic_percussive_observations(wave: Any, *, rate: int = SR,
     Cannot distinguish singer from guitar, bass from drums, or backing vocals
     from lead vocals; those require a pretrained source separation model.
     """
-    import numpy as np
     import librosa
+    import numpy as np
     x = np.asarray(wave, dtype=np.float32).reshape(-1)
     if len(x) < 1024:
         return {'method': 'hpss_spectral_proxy', 'status': 'insufficient_audio',
@@ -105,7 +105,6 @@ def timed_music_events(report: dict, *, waveform: Any | None = None,
     trustworthy media clock. Skipped non-music gaps make this clock diverge
     from real song progress; never label it a media/player timestamp.
     """
-    import numpy as np
     duration = float(report.get('duration_s') or 0)
     rhythm = report.get('rhythm') or {}
     beats = _times(rhythm.get('beat_times_s') or [], duration)

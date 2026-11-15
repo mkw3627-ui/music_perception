@@ -367,10 +367,10 @@ def _item(pid: str, name: str, purpose: str, required: bool, state: str,
 
 def scan_environment(plugin: Any) -> dict:
     """生成检测项，全部调用现有函数；不写新的探测逻辑，不下载。"""
+    from .adaptive_resources import free_system_ram_mib, gpu_memory
     from .runtime_environment import model_valid
-    from .adaptive_resources import gpu_memory, free_system_ram_mib
-    from .stem_catalog import overview as stem_overview
     from .singing_catalog import inventory as singing_inventory
+    from .stem_catalog import overview as stem_overview
     from .stem_cuda_bundle import missing_private_cuda_files
 
     items: list[dict] = []
@@ -426,7 +426,7 @@ def scan_environment(plugin: Any) -> dict:
     # lyrics_model：视频语音模型（可选，任一档位安装即 ok）
     lyrics_ok = False
     try:
-        from .lyrics_model_store import inspect_model_files, MODELS
+        from .lyrics_model_store import MODELS, inspect_model_files
         lroot = data_dir / "models" / "whisper_multilingual"
         for _q, m in MODELS.items():
             rec = inspect_model_files(m, lroot, deep=False)

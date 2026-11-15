@@ -1,10 +1,12 @@
 """Safe bridge between the plugin's music-only PCM and optional ASR worker."""
 from __future__ import annotations
+
 import json
 import os
-from pathlib import Path
+import queue
 import subprocess
 import sys
+from pathlib import Path
 from typing import Callable
 
 

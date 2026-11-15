@@ -6,14 +6,14 @@ observations without treating two ordinary music windows as the same song.
 No identity is derived from a title alone or an unverified tempo similarity.
 """
 from __future__ import annotations
-from collections import deque
+
 import copy
 import hashlib
 import json
 import os
-from pathlib import Path
 import threading
-
+from collections import deque
+from pathlib import Path
 
 QUALITY_MODEL = {'low': 'tiny', 'medium': 'base', 'high': 'small',
                  'ultra': 'large-v3-turbo'}

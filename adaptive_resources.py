@@ -9,12 +9,12 @@ never attempt to swap CUDA allocations directly into system RAM.
 """
 from __future__ import annotations
 
-import shutil
 import ctypes
 import os
-from pathlib import Path
+import shutil
 import subprocess
 import time
+from pathlib import Path
 
 TIERS = ('low', 'medium', 'high', 'ultra')
 DOMAINS = ('video', 'singing', 'stem')

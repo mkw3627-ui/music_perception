@@ -10,6 +10,7 @@ Uses only stdlib ctypes; native COM calls are made only on Windows, within
 an executor thread. Refuses to silently list all running processes on errors.
 """
 from __future__ import annotations
+
 import math
 import sys
 import time

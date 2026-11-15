@@ -6,12 +6,12 @@ samples, transcript text, or the worker's stdout (which contains music data).
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Callable
 
 

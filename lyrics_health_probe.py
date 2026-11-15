@@ -4,15 +4,15 @@ A GPU model preflight uses one second of generated silence, ONLY when the
 plugin is idle. It never downloads weights or repairs system drivers.
 """
 from __future__ import annotations
+
 import importlib
 import importlib.metadata
 import json
-import os
-from pathlib import Path
 import platform
+import subprocess
 import sys
 import time
-import subprocess
+from pathlib import Path
 
 
 def _save(path, payload):

@@ -6,6 +6,7 @@ and provide an A/B preview; a more expensive preset can sound worse on some
 music. Four different published ONNX weights, no silent downloads.
 """
 from __future__ import annotations
+
 from pathlib import Path
 
 # SHA-256 and file size sourced from the pinned published Hugging Face file

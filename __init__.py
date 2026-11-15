@@ -8,59 +8,86 @@ import math
 import os
 import queue
 import secrets
-import threading
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Annotated, Any
 
 from plugin.sdk.plugin import (
-    NekoPluginBase, Ok, lifecycle, llm_tool, neko_plugin, plugin_entry, ui,
+    NekoPluginBase,
+    Ok,
+    lifecycle,
+    llm_tool,
+    neko_plugin,
+    plugin_entry,
+    ui,
 )
 
-from .engine import AudioAnalysisError, EXTENSIONS, analyze_audio, analyze_waveform, brief_for_ai
-from .auto_listener import LiveListener, ListenerError, FinishedClip
-from .audio_scene import classify_scene, normal_role
-from .isolated_loopback import IsolatedWindowsLoopback, IsolatedApplicationLoopback
-from .host_llm import HostAppClassifier
-from .app_channels import (list_app_processes, verify_selected_process,
-                           selected_scene, CAPTURE_MODES, tag_application,
-                           process_image_path, normalized_exe_path, browser_executable,
-                           choose_title_evidence, MUSIC_APPLICATIONS,
-                           BROWSER_APPLICATIONS, VIDEO_APPLICATIONS)
-from .window_titles import titles_by_pid, windows_by_pid, foreground_window, resolve_titles
-from .song_titles import parse_player_window_title
-from .windows_audio_sessions import scan_audible_sessions
+from .analysis_bridge import AnalysisWorkerCancelled, AnalysisWorkerError, analyze_pcm_isolated
+from .app_channels import (
+    BROWSER_APPLICATIONS,
+    CAPTURE_MODES,
+    MUSIC_APPLICATIONS,
+    VIDEO_APPLICATIONS,
+    browser_executable,
+    choose_title_evidence,
+    list_app_processes,
+    normalized_exe_path,
+    process_image_path,
+    selected_scene,
+    tag_application,
+    verify_selected_process,
+)
 from .app_source_recovery import find_replacement
-from .audio_dispatch import PrivateAudioBus, SourceLabels, source_id as make_source_id
-from .media_modes import MediaModeFile, detect_game
-from .vision_review import (VisionReviewPolicy, REVIEW_LABEL_TTL_S, app_matches,
-                            classify_observation, reviewable_tag, pick_review_target,
-                            pick_capture_target, normalize_app)
-from .process_capture_installer import ProcessCaptureInstaller
-from .runtime_environment import MusicEnvironment, model_valid
-from .analysis_bridge import analyze_pcm_isolated, AnalysisWorkerError, AnalysisWorkerCancelled
-from .spectral_context import spectrum_for_ai, auxiliary_cues, ai_auditory_context, condensed_history_item
-from .music_events import offset_event_timeline, compact_music_context, enrich_with_user_lrc
-from .lyrics_sync import load_adjacent_lrc
-from .player_lyrics import find_authorized_player_lrc, preview_player_lyrics
-from .lyrics_bridge import recognize_pcm_isolated, PersistentLyricsSession, LyricsWorkerError, LyricsModelDownloadError
+from .audio_dispatch import PrivateAudioBus, SourceLabels
+from .audio_dispatch import source_id as make_source_id
+from .audio_scene import classify_scene, normal_role
+from .auto_listener import FinishedClip, ListenerError, LiveListener
+from .cognitive_bridge_v1 import HearingCognitiveBridgeV1
+from .engine import EXTENSIONS, AudioAnalysisError, analyze_audio, analyze_waveform, brief_for_ai
+from .glance import GLANCE_INTERVAL_S, GlanceScheduler
+from .host_llm import HostAppClassifier
+from .isolated_loopback import IsolatedApplicationLoopback, IsolatedWindowsLoopback
 from .lyric_timing import align_lyrics_to_music
-from .media_session_bridge import read_system_media
-from .song_memory import RecentSongMemory, QUALITY_MODEL, trusted_song_identity, audio_segment_fingerprint
+from .lyrics_bridge import LyricsModelDownloadError, LyricsWorkerError, PersistentLyricsSession, recognize_pcm_isolated
 from .lyrics_continuity import join_song_audio, merge_song_lyrics
 from .lyrics_device_capabilities import probe_cuda_isolated
-from .stem_mdx import MODEL_FILENAME as STEM_MODEL_FILENAME, MODEL_SOURCE as STEM_MODEL_SOURCE, verify_model as verify_stem_model
+from .lyrics_sync import load_adjacent_lrc
+from .media_modes import MediaModeFile, detect_game
+from .media_session_bridge import read_system_media
+from .music_events import compact_music_context, enrich_with_user_lrc, offset_event_timeline
+from .player_lyrics import find_authorized_player_lrc, preview_player_lyrics
+from .process_capture_installer import ProcessCaptureInstaller
+from .runtime_environment import MusicEnvironment, model_valid
+from .song_memory import QUALITY_MODEL, RecentSongMemory, audio_segment_fingerprint, trusted_song_identity
+from .song_titles import parse_player_window_title
+from .spectral_context import ai_auditory_context, auxiliary_cues, condensed_history_item, spectrum_for_ai
+from .speech_timeline import annotate_video_evidence, music_phrases, video_sentences
 from .stem_bridge import PersistentStemSession, StemWorkerError
-from .stem_gpu_runtime import (overlay_path as stem_gpu_overlay_path,
-                               inventory as stem_gpu_inventory)
-from .stem_catalog import (STEM_PROFILES, DEFAULT_STEM_QUALITY, path_for as stem_path_for,
-                           overview as stem_overview, verify_local_model as verify_stem_tier)
-from .speech_timeline import music_phrases, video_sentences, annotate_video_evidence
+from .stem_catalog import DEFAULT_STEM_QUALITY, STEM_PROFILES
+from .stem_catalog import overview as stem_overview
+from .stem_catalog import path_for as stem_path_for
+from .stem_catalog import verify_local_model as verify_stem_tier
+from .stem_gpu_runtime import inventory as stem_gpu_inventory
+from .stem_gpu_runtime import overlay_path as stem_gpu_overlay_path
+from .stem_mdx import MODEL_FILENAME as STEM_MODEL_FILENAME
+from .stem_mdx import MODEL_SOURCE as STEM_MODEL_SOURCE
+from .stem_mdx import verify_model as verify_stem_model
 from .video_series import infer_video_position
 from .video_window import decide_video_window
-from .glance import GlanceScheduler, GLANCE_INTERVAL_S
-from .cognitive_bridge_v1 import HearingCognitiveBridgeV1
+from .vision_review import (
+    REVIEW_LABEL_TTL_S,
+    VisionReviewPolicy,
+    app_matches,
+    classify_observation,
+    normalize_app,
+    pick_capture_target,
+    pick_review_target,
+    reviewable_tag,
+)
+from .window_titles import foreground_window, resolve_titles, titles_by_pid, windows_by_pid
+from .windows_audio_sessions import scan_audible_sessions
 
 # Two video watch tiers. 'balanced' = frames + speech evidence (default);
 # 'efficient' = frames only, for low-end machines.
@@ -153,22 +180,37 @@ GLANCE_VERDICT_FRAMES = 3
 # cross-plugin RPC timeout so it always covers every requested frame.
 GLANCE_FRAME_COST_S = 25.0
 GLANCE_TIMEOUT_CEILING_S = 240.0
-from .model_assets import (model_plan, free_disk_check, remove_plugin_model_dir,
-                           remove_stem_model, STEM_EXPECTED_BYTES)
-from .lyrics_diagnostics import read_stage, diagnose_stall
-from .singing_catalog import PROFILES as SINGING_PROFILES, inventory as singing_inventory, verified_folder as verified_singing_folder
-from .singing_install import (
-    ensure_environment as ensure_singing_environment, paths as singing_venv_paths,
-    private_environment_status, uninstall_environment as remove_singing_private_venv,
-    SingingInstallCancelled,
-)
-from .adaptive_resources import (
-    DOMAINS as RESOURCE_DOMAINS, TIERS as RESOURCE_TIERS,
-    gpu_memory, select_model, PressureTracker, DEFAULT_RESERVE_MIB, free_system_ram_mib)
+from .adaptive_resources import DEFAULT_RESERVE_MIB, PressureTracker, free_system_ram_mib, gpu_memory, select_model
+from .adaptive_resources import DOMAINS as RESOURCE_DOMAINS
+from .adaptive_resources import TIERS as RESOURCE_TIERS
+from .lyrics_diagnostics import diagnose_stall, read_stage
+from .model_assets import STEM_EXPECTED_BYTES, free_disk_check, model_plan, remove_plugin_model_dir, remove_stem_model
 from .onboarding import (
-    OnboardingStore, OnboardingInstaller, validate_storage_root,
-    scan_environment, recommend, picker_start, picker_wait, picker_cancel)
-
+    OnboardingInstaller,
+    OnboardingStore,
+    picker_cancel,
+    picker_start,
+    picker_wait,
+    recommend,
+    scan_environment,
+    validate_storage_root,
+)
+from .singing_catalog import PROFILES as SINGING_PROFILES
+from .singing_catalog import inventory as singing_inventory
+from .singing_catalog import verified_folder as verified_singing_folder
+from .singing_install import (
+    SingingInstallCancelled,
+    private_environment_status,
+)
+from .singing_install import (
+    ensure_environment as ensure_singing_environment,
+)
+from .singing_install import (
+    paths as singing_venv_paths,
+)
+from .singing_install import (
+    uninstall_environment as remove_singing_private_venv,
+)
 
 # Keep the plugin worker responsive while the host finishes its startup handshake.
 # Optional installer/model preparation begins only after the lifecycle hook has returned.
@@ -1413,7 +1455,7 @@ class MusicPerceptionPlugin(NekoPluginBase):
                     "ram_free_mib": 0, "reserve_mib": int(getattr(self, '_resource_reserve_mib', 2048))}
         recommend_result = {}
         try:
-            from .adaptive_resources import gpu_memory, free_system_ram_mib
+            from .adaptive_resources import free_system_ram_mib, gpu_memory
             gpu = gpu_memory(timeout=1.8)
             ram = free_system_ram_mib()
             hardware = {"gpu_name": "", "gpu_available": bool(gpu.get('available')),
@@ -1444,9 +1486,9 @@ class MusicPerceptionPlugin(NekoPluginBase):
 
     def _onboarding_catalogs(self) -> dict:
         """把各档位的显存/大小估算汇总给 recommend（只读，不下载）。"""
-        from .stem_catalog import STEM_PROFILES
-        from .singing_catalog import PROFILES as SINGING_PROFILES
         from .model_assets import ASR_GPU_PLANS
+        from .singing_catalog import PROFILES as SINGING_PROFILES
+        from .stem_catalog import STEM_PROFILES
         video = {q: {"vram_mib": int(vram[0]), "bytes": 0}
                  for q, vram in ASR_GPU_PLANS.items()}
         singing = {q: {"vram_mib": int(d['suggested_free_vram_mib']),
@@ -1537,8 +1579,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
             except Exception:  # noqa: BLE001
                 pass
         try:
-            from .live2d_stage_server import (stop_all as _stop_stage_servers,
-                                              stop_bridge_server)
+            from .live2d_stage_server import stop_all as _stop_stage_servers
+            from .live2d_stage_server import stop_bridge_server
             _stop_stage_servers()
             stop_bridge_server()
         except Exception:  # noqa: BLE001 - 关停失败不影响插件卸载
@@ -1861,8 +1903,7 @@ class MusicPerceptionPlugin(NekoPluginBase):
                                                   deep=False) is not None
                     for key in RESOURCE_TIERS}
         if domain=='video':
-            from .lyrics_model_store import (inspect_model_files,sidecar_stat_signature,
-                candidate_model_directories)
+            from .lyrics_model_store import candidate_model_directories, inspect_model_files, sidecar_stat_signature
             root=self.data_path('models')/'whisper_multilingual'
             output={}
             for key,model in QUALITY_MODEL.items():
@@ -6064,7 +6105,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
             'limit':{'type':'integer','minimum':1,'maximum':32}}},
         timeout=8.0)
     async def cog_poll_v1(self,cursor:str='',limit:int=20,**_):
-        import hashlib, json
+        import hashlib
+        import json
         from datetime import datetime, timedelta, timezone
         def batch(status,reason='',message='',observations=None,next_cursor=''):
             return Ok({'schema_version':'cognition.observation.v1','source_plugin':'music_perception',
@@ -7537,7 +7579,9 @@ class MusicPerceptionPlugin(NekoPluginBase):
         pcm=snap.get('tracks',{}).get(stage)
         if not pcm or len(pcm)>225000:
             return Ok({'ok':False,'error':'试听缓存不存在或超出允许范围'})
-        import base64,io,wave
+        import base64
+        import io
+        import wave
         buffer=io.BytesIO()
         with wave.open(buffer,'wb') as wav:
             wav.setnchannels(1);wav.setsampwidth(2);wav.setframerate(16000)
@@ -8104,8 +8148,12 @@ class MusicPerceptionPlugin(NekoPluginBase):
                             # verdict, with unchanged size AND nanosecond
                             # mtime, and with complete valid CT2 sidecars.
                             # Activation rehashes before loading.
-                            from .lyrics_model_store import (candidate_model_directories,
-                                sidecar_stat_signature, REQUIRED_FILES, validate_sidecar_file)
+                            from .lyrics_model_store import (
+                                REQUIRED_FILES,
+                                candidate_model_directories,
+                                sidecar_stat_signature,
+                                validate_sidecar_file,
+                            )
                             intact = False
                             for folder, origin in candidate_model_directories(model,root):
                                 try:
@@ -8221,8 +8269,9 @@ class MusicPerceptionPlugin(NekoPluginBase):
         # Record the verified file identity for inexpensive Hosted-UI reads.
         # Do not write a green badge until the full SHA and sidecars passed.
         try:
-            from .lyrics_model_store import sidecar_stat_signature
             import json as _json
+
+            from .lyrics_model_store import sidecar_stat_signature
             verified_path=Path(verified)
             weight=verified_path/'model.bin'
             stat=weight.stat()
@@ -8970,7 +9019,7 @@ class MusicPerceptionPlugin(NekoPluginBase):
                         (selected is None or saved.get('model')==selected)):
                     # A previous completed download is useful, but a stale
                     # 'running' record from an earlier process is not live.
-                    if not (memory.get('state') in {'queued','running'}):
+                    if memory.get('state') not in {'queued','running'}:
                         memory = saved
                     else:
                         memory['stage'] = saved.get('stage',memory.get('stage'))
@@ -8982,8 +9031,12 @@ class MusicPerceptionPlugin(NekoPluginBase):
         # UI poll; the downloader still verifies the official SHA-256.
         if memory.get('state') == 'ready':
             try:
-                from .lyrics_model_store import (MODELS, REQUIRED_FILES,
-                    candidate_model_directories, _sidecar_present_cheap)
+                from .lyrics_model_store import (
+                    MODELS,
+                    REQUIRED_FILES,
+                    _sidecar_present_cheap,
+                    candidate_model_directories,
+                )
                 model=QUALITY_MODEL.get(getattr(self,'_lyrics_profile',None))
                 spec=MODELS.get(model) if model else None
                 if spec:
@@ -9868,6 +9921,7 @@ class MusicPerceptionPlugin(NekoPluginBase):
 
         def work():
             import wave
+
             import numpy as np
             title_marks = []
             last_title = None

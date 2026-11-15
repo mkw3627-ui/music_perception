@@ -27,3 +27,9 @@ test = ["pytest>=7", "pytest-asyncio>=0.23"]
 # Heavy model backends are intentionally NOT installed during plugin startup.
 # Beat This!: follow upstream repository requirements and provision a trusted
 # checkpoint separately if you enable beat_this_checkpoint.
+
+# 只为声明打包规则（N.E.K.O Plugin CLI 的 [tool.neko.build]）。
+# 插件市场不允许包内出现二进制文件：.exe / .pyd / .dll 一律排除。
+# 模型权重由插件首次运行时下载，不随包分发。
+[tool.neko.build]
+exclude = ["*.pyd", "*.exe", "*.dll", "*.so", "*.dylib", "*.gz", "*.tflite", "*.onnx", "*.pt", "*.bin"]

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .lyrics_model_store import find_local_model, LyricsModelDownloadError
+from .lyrics_model_store import LyricsModelDownloadError, find_local_model
 
 SUPPORTED_LANGUAGES = {'zh', 'ja', 'en'}
 LANGUAGE_MODES = {'auto', 'zh', 'ja', 'en'}

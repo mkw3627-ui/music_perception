@@ -11,7 +11,7 @@ from __future__ import annotations
 def enhance_vocals(vocals, backing, *, rate=16000, strength='balanced'):
     import numpy as np
     from scipy.ndimage import gaussian_filter
-    from scipy.signal import stft, istft
+    from scipy.signal import istft, stft
 
     if strength not in {'off', 'gentle', 'balanced', 'strong'}:
         raise ValueError('无效的人声增强强度')

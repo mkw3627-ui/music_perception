@@ -1,5 +1,6 @@
 """Align ASR time estimates with beats while preserving their real timestamps."""
 from __future__ import annotations
+
 import bisect
 import copy
 import math

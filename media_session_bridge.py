@@ -1,10 +1,11 @@
 """Fail-open Windows SMTC metadata reader (isolated from frozen N.E.K.O)."""
 from __future__ import annotations
+
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 
 
 def read_system_media(*,python_exe,vendor,worker_script,timeout=4.0):

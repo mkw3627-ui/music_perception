@@ -5,15 +5,15 @@ Do not install into system Python or the host's shared CUDA/Python environment.
 All commands use trusted, fixed package specifications without a shell.
 """
 from __future__ import annotations
+
 import os
-from pathlib import Path
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
-import threading
 import time
+from pathlib import Path
 
 SINGING_WHISPER_PACKAGES = ('faster-whisper>=1.1,<2','huggingface-hub>=0.31,<2','numpy>=1.24,<3')
 SINGING_QWEN_PACKAGES = ('qwen-asr==0.0.6','huggingface-hub>=0.31,<2','numpy>=1.24,<3',

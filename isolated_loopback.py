@@ -10,16 +10,16 @@ import json
 import os
 import queue
 import re
+import struct
+import subprocess
+import sys
 import threading
 import time
 from collections import deque
 from pathlib import Path
-import struct
-import subprocess
-import sys
 from typing import BinaryIO
 
-from .auto_listener import ListenerError, SAMPLE_RATE, WINDOW_SECONDS
+from .auto_listener import SAMPLE_RATE, WINDOW_SECONDS, ListenerError
 
 _HEADER = struct.Struct('!cI')
 _MAX_PACKET = 1_000_000

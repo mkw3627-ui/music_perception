@@ -1,9 +1,11 @@
 """Offline standalone demo: python cli.py path/to/music.wav [--json output.json]."""
 from __future__ import annotations
+
 import argparse
 import json
 from pathlib import Path
-from engine import analyze_audio, AudioAnalysisError
+
+from engine import AudioAnalysisError, analyze_audio
 
 
 def main():

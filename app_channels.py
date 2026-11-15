@@ -6,7 +6,6 @@ No native calls at import. No host SDK or external package dependencies.
 """
 from __future__ import annotations
 
-import os
 import re
 import sys
 from dataclasses import dataclass

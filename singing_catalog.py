@@ -6,14 +6,12 @@ Public checkpoints only; no copyrighted lyrics database is bundled.
 """
 from __future__ import annotations
 
-from pathlib import Path
 import hashlib
 import json
 import os
 import shutil
-import tempfile
-import time
 import threading
+from pathlib import Path
 
 PROFILES = {
     'low': {'id':'sing-whisper-small','repo':'Systran/faster-whisper-small',
