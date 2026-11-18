@@ -66,13 +66,41 @@ def test_existing_external_python_avoids_install(monkeypatch, tmp_path):
     assert not any(c[1:3] == ['python', 'install'] for c in seen)
 
 
-def test_no_python_no_uv_reports_precise_error_never_calls_packaged_exe(monkeypatch, tmp_path):
+def test_no_python_no_uv_falls_back_to_portable_never_calls_packaged_exe(monkeypatch, tmp_path):
     packaged = tmp_path / 'projectneko_server.exe'; packaged.write_text('frozen')
     monkeypatch.setattr(rt.sys,'executable',str(packaged))
     monkeypatch.setattr(rt.shutil,'which',lambda x: None)
     monkeypatch.setattr(rt.PythonResolver,'_run', lambda *a, **k: pytest.fail('must not spawn packaged app'))
-    with pytest.raises(rt.PythonResolutionError, match='独立 CPython.*uv'):
-        rt.PythonResolver(tmp_path / 'private').resolve()
+    portable = []
+    monkeypatch.setattr(rt.PythonResolver,'_portable_python', lambda self: portable.append(1) or 'portable')
+    assert rt.PythonResolver(tmp_path / 'private').resolve() == 'portable'
+    assert portable == [1]
+
+
+def test_portable_python_rejects_wrong_sha_and_never_extracts(monkeypatch, tmp_path):
+    import io
+    if rt.os.name != 'nt':
+        pytest.skip('portable CPython is Windows only')
+
+    class Reply(io.BytesIO):
+        def geturl(self): return 'https://mirror.example/python.tar.gz'
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+    monkeypatch.setattr(rt.urllib.request,'urlopen', lambda *a, **k: Reply(b'not the pinned archive'))
+    monkeypatch.setattr(rt.PythonResolver,'_validate', lambda self, c: False)
+    resolver = rt.PythonResolver(tmp_path / 'private')
+    resolver.directory.mkdir(parents=True)
+    with pytest.raises(rt.PythonResolutionError, match='SHA-256'):
+        resolver._portable_python()
+    assert not (tmp_path / 'private' / 'portable-python').exists()
+
+
+def test_portable_python_pins_every_supported_version():
+    for version in ('3.11', '3.12', '3.13'):
+        filename, digest = rt.PORTABLE_PYTHON[version]
+        assert filename.startswith('cpython-' + version + '.') and filename.endswith('windows-msvc-install_only.tar.gz')
+        assert len(digest) == 64
+    assert rt.PORTABLE_PYTHON_SOURCES[0][1].startswith('https://mirror.nju.edu.cn/')
 
 
 def test_rejects_incompatible_native_abi(monkeypatch, tmp_path):

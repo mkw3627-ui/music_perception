@@ -5,9 +5,9 @@ from __future__ import annotations
 import argparse
 import ast
 import json
+from pathlib import Path
 import re
 import tomllib
-from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MARKER = "# >>> STATIC ENTRIES (generated from @plugin_entry) >>>"

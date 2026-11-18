@@ -62,6 +62,8 @@ def test_singer_worker_progress_emits_estimate_and_isolation(monkeypatch,tmp_pat
         raise RuntimeError('offline expected')
     monkeypatch.setitem(sys.modules,'huggingface_hub',types.SimpleNamespace(
         HfApi=MockApi,snapshot_download=abort_download))
+    monkeypatch.setattr(singer,'_download_modelscope',
+                        lambda stage,quality,**_:abort_download(local_dir=stage))
     events=[]
     with pytest.raises(singer.SingingModelError):
         singer.acquire_model(tmp_path,'low',source='official',

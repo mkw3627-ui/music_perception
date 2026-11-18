@@ -4,16 +4,16 @@ Run under the managed CPython -I -S and isolated vendor.  No N.E.K.O SDK,
 no audio processing and no authentication secrets in the status file.
 """
 from __future__ import annotations
-
-import inspect
 import json
-import os
+from pathlib import Path
 import sys
-import threading
 import time
 import types
+import threading
+import inspect
+import os
 import uuid
-from pathlib import Path
+
 
 _report_lock = threading.Lock()
 
@@ -94,11 +94,8 @@ def main() -> int:
     transfer_lock = threading.Lock()
     try:
         from music_perception.lyrics_model_store import (
-            EXPECTED_DOWNLOAD_BYTES,
-            ensure_local_model,
-            observed_download_bytes,
-            sidecar_stat_signature,
-        )
+            ensure_local_model, observed_download_bytes, EXPECTED_DOWNLOAD_BYTES,
+            sidecar_stat_signature)
         total = EXPECTED_DOWNLOAD_BYTES[model]
         report(target, model, 'checking_existing', 'running',
                '正在核对已有权重；未确认完整之前不能启用模型',

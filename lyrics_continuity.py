@@ -6,10 +6,9 @@ PCM nor lyric context can cross a song ID, an interrupted interval or consent
 revocation. All audio stays in volatile memory.
 """
 from __future__ import annotations
-
-import re
 from dataclasses import replace
 from difflib import SequenceMatcher
+import re
 
 
 def join_song_audio(clip, *, previous_tail, previous_sequence,

@@ -7,14 +7,14 @@ from __future__ import annotations
 
 import json
 import os
-import queue
 import re
+import time
+from pathlib import Path
+import queue
 import struct
 import subprocess
 import sys
 import threading
-import time
-from pathlib import Path
 
 _HEADER = struct.Struct('!I')
 _MAX_META = 4096

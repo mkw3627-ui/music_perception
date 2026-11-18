@@ -5,7 +5,7 @@ import {
 import type { PluginSurfaceProps } from "@neko/plugin-ui"
 import { Onboarding, qualities, singingOptions, stemChoices } from "./onboarding"
 
-const UI_PROTOCOL_BUILD = "0.9.21-onboarding-r1"
+const UI_PROTOCOL_BUILD = "0.9.22-suokong-gate-r1"
 // N.E.K.O Hosted TSX; the same native UI kit used by 为她所控.
 // No external browser, CDN, React build or extra local web server.
 // Supersedes "0.9.0-audible-app-tags-r1". Backend compatibility interface
@@ -883,7 +883,30 @@ export default function WeiTaSuoTing(props:PluginSurfaceProps) {
       </Stack></Card>
     </>:null}
 
-    {tab==="video"?<>
+    {tab==="video"?(status.suokong_available===false?
+      <div style={{position:"relative"}}>
+        <div style={{filter:"blur(3px)",opacity:0.45,pointerEvents:"none",userSelect:"none"}} aria-hidden="true">
+          <Card title="视频语音状态"><Stack>
+            <StatusBadge tone="neutral">暂无视频语音片段</StatusBadge>
+            <Text>视频识别片段 0　·　疑似幻觉已排除 0</Text>
+            <Text>检测到 0 个媒体会话来源</Text>
+          </Stack></Card>
+          <Card title="观看模式"><Stack>
+            <SegmentedControl value="balanced"
+              options={[{value:"balanced",label:"画面+语音（默认）"},{value:"efficient",label:"效能（仅画面）"}]}
+              onChange={()=>{}}/>
+            <Text>当前：画面+语音，抽帧看画面，语音作为辅助证据按时间对齐</Text>
+          </Stack></Card>
+        </div>
+        <div style={{position:"absolute",inset:0,borderRadius:"18px",
+          background:"#0b1622aa",display:"flex",alignItems:"center",justifyContent:"center",
+          flexDirection:"column",gap:"10px",textAlign:"center",padding:"24px"}}>
+          <div style={{fontSize:"26px",color:"#8ef6f0"}}>◎</div>
+          <Text>请安装「为她所控」后可使用</Text>
+          <Text>视频识别需要它来截取画面、匹配歌词和反查视频信息。</Text>
+        </div>
+      </div>
+    :<>
       <Card title="视频语音状态"><Stack>
         <StatusBadge tone={Number(status.video_speech_segments||0)>0?"success":"neutral"}>
           {Number(status.video_speech_segments||0)>0?"已识别视频语音":"暂无视频语音片段"}</StatusBadge>
@@ -904,7 +927,7 @@ export default function WeiTaSuoTing(props:PluginSurfaceProps) {
           ?"当前：效能模式，只按抽帧看画面，不听语音，适合低配电脑"
           :"当前：画面+语音，抽帧看画面，语音作为辅助证据按时间对齐"}</Text>
       </Stack></Card>
-    </>:null}
+    </>):null}
 
     {tab==="model"?<>
       <Card title="模型管理工作台"><Stack>

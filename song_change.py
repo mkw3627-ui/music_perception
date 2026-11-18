@@ -5,7 +5,6 @@ obvious *possible* seamless transitions, not song identity. No fingerprint DB,
 network calls, raw-audio caching or microphone capture.
 """
 from __future__ import annotations
-
 from collections import deque
 
 

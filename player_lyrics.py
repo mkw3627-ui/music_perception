@@ -4,11 +4,9 @@ Nothing is downloaded or scraped. Scanning is bounded to expressly permitted
 music folders; timing is only an estimate because SMTC clocks can drift.
 """
 from __future__ import annotations
-
 import re
 import unicodedata
 from pathlib import Path
-
 from .lyrics_sync import parse_lrc
 
 

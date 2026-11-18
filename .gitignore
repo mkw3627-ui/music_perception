@@ -35,3 +35,6 @@ store.db
 .env
 .DS_Store
 build/
+
+# 宿主安装时生成的记录
+plugin.meta.json

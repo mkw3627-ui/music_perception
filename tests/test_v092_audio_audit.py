@@ -34,9 +34,10 @@ def test_four_models_have_distinct_pinned_weights_and_specific_shapes():
         assert abs(info['compensation']-comp)<1e-8
         assert len(info['sha256'])==64
         assert info['bytes_estimate']>50_000_000
-        assert len(stem_catalog.urls_for(name,'official'))==2
+        assert len(stem_catalog.urls_for(name,'official'))==3
+        assert stem_catalog.urls_for(name,'mirror')[0][1].startswith(stem_catalog.MODELSCOPE_STEM_BASE)
         assert stem_catalog.urls_for(name,'official')[0][0].startswith('Hugging Face')
-        assert '/'+info['repo']+'/resolve/main/'+file in stem_catalog.urls_for(name)[0][1]
+        assert '/'+info['repo']+'/resolve/main/'+file in stem_catalog.urls_for(name)[1][1]
         assert model_plan('stems:'+name)['sha256']==info['sha256']
 
 

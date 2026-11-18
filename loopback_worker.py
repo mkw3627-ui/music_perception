@@ -6,13 +6,13 @@ Only render-device loopback is enumerated; there is no microphone fallback.
 """
 from __future__ import annotations
 
+from contextlib import redirect_stdout
 import json
+from pathlib import Path
 import struct
 import sys
 import traceback
 import types
-from contextlib import redirect_stdout
-from pathlib import Path
 
 _HEADER = struct.Struct('!cI')
 _OUT = sys.stdout.buffer
@@ -92,7 +92,7 @@ def main() -> int:
         package.__package__ = 'music_perception'
         sys.modules['music_perception'] = package
         with redirect_stdout(sys.stderr):
-            from music_perception.auto_listener import WINDOW_SECONDS, ListenerError, SoundCardLoopback
+            from music_perception.auto_listener import SoundCardLoopback, ListenerError, WINDOW_SECONDS
             # In v0.4.7 the SoundCard backend initializes its own COM. Avoid
             # any prior CoInitializeEx calls in this process (S_FALSE bug).
             last_error = None
@@ -109,7 +109,6 @@ def main() -> int:
                                              'sample_rate': 16000, 'capture_rate': rate})
                         stage = '正在读取扬声器回环帧'
                         import math
-
                         import numpy as np
                         from scipy.signal import resample_poly
                         blocks = max(1, int(round(WINDOW_SECONDS / BLOCK_SECONDS)))

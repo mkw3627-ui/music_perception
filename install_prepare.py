@@ -10,18 +10,20 @@ explicitly user-authorized operation, not part of plugin startup or LLM tools.
 from __future__ import annotations
 
 import hashlib
-import os
 import re
-import shutil
-import subprocess
 import tempfile
 import tomllib
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
 import urllib.parse
 import urllib.request
-from pathlib import Path
 from typing import Callable
 
-from .runtime_environment import PIP_SOURCES, MusicEnvironment, PythonResolutionError, PythonResolver
+from .runtime_environment import (MusicEnvironment, PIP_SOURCES, PythonResolver,
+                                  PythonResolutionError)
 
 PLUGIN_ID = "music_perception"
 MAX_MODEL_BYTES = 80 * 1024 * 1024

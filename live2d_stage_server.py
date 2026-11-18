@@ -16,8 +16,8 @@ import mimetypes
 import secrets
 import socketserver
 import threading
-import time
 import urllib.parse
+import time
 from http.server import BaseHTTPRequestHandler, SimpleHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import urlsplit

@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>为她所听 · 音乐律动预览</title>
+<style>
+  html,body{margin:0;height:100%;background:#111318;color:#e8e8ea;font:14px/1.5 system-ui,"Microsoft YaHei",sans-serif}
+  #stage{position:absolute;inset:0}
+  #hud{position:absolute;left:16px;top:16px;z-index:5;background:rgba(20,22,28,.82);
+       border:1px solid #2e3340;border-radius:12px;padding:14px;width:300px;backdrop-filter:blur(8px)}
+  #hud h3{margin:0 0 10px;font-size:15px;font-weight:600}
+  #hud label{display:block;margin:8px 0 4px;color:#9aa3b2;font-size:12px}
+  #hud input[type=range]{width:100%}
+  #hud select,#hud textarea,#hud input[type=file]{width:100%;background:#181b22;color:#e8e8ea;
+       border:1px solid #2e3340;border-radius:8px;padding:6px}
+  #hud textarea{height:64px;resize:vertical}
+  #read{white-space:pre-wrap;color:#8f98a8;font-size:12px;margin-top:10px;min-height:44px}
+  .row{display:flex;gap:8px}
+  .row>*{flex:1}
+  button{background:#2b6cf6;color:#fff;border:0;border-radius:8px;padding:7px 10px;cursor:pointer}
+  button.ghost{background:#262b36}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div id="hud">
+  <h3>音乐律动预览</h3>
+  <label>音频文件（本地，不上传）</label>
+  <input id="file" type="file" accept="audio/*">
+  <div class="row" style="margin-top:8px">
+    <button id="play">播放</button>
+    <button id="stop" class="ghost">停止</button>
+  </div>
+  <label>风格</label>
+  <select id="style">
+    <option value="auto">自动（按乐句切换）</option>
+    <option value="sway">摇摆 sway</option>
+    <option value="bounce">弹跳 bounce</option>
+    <option value="nod">点头 nod</option>
+    <option value="lean">倾斜 lean</option>
+    <option value="step">踏步 step</option>
+    <option value="dance">综合 dance</option>
+  </select>
+  <label>幅度 <span id="intv">1.0</span></label>
+  <input id="intensity" type="range" min="0" max="1.6" step="0.05" value="1">
+  <label style="display:flex;align-items:center;gap:8px;margin-top:10px">
+    <input id="live" type="checkbox" style="width:auto"> 跟随为她所听（实时频谱）
+  </label>
+  <div id="song" style="color:#7dd3fc;font-size:12px;min-height:16px"></div>
+  <label>逐字口型（为她而唱，一行一句）</label>
+  <textarea id="lyrics" placeholder="時間旅行
+僕らの恋"></textarea>
+  <div class="row" style="margin-top:8px">
+    <button id="lips" class="ghost">按字对口型</button>
+  </div>
+  <div id="read">等待模型与音频…</div>
+</div>
+
+<script src="./vendor/pixi.min.js"></script>
+<script src="./vendor/live2dcubismcore.min.js"></script>
+<script src="./vendor/cubism4.min.js"></script>
+<script src="./music_groove.js"></script>
+<script src="./music_visemes.js"></script>
+<script>
+(async function () {
+  const read = (t) => { document.getElementById('read').textContent = t; };
+  const app = new PIXI.Application({ backgroundAlpha: 0, resizeTo: window, antialias: true });
+  document.getElementById('stage').appendChild(app.view);
+
+  let model = null, core = null;
+  try {
+    model = await PIXI.live2d.Live2DModel.from('./model/mkw/小侦探.model3.json');
+    app.stage.addChild(model);
+    const fit = () => {
+      const w = app.renderer.screen.width, h = app.renderer.screen.height;
+      const s = Math.min(w / model.internalModel.originalWidth, h / model.internalModel.originalHeight) * 0.86;
+      model.scale.set(s);
+      model.position.set(w * 0.62, h * 0.98);
+      model.anchor.set(0.5, 1);
+    };
+    fit();
+    window.addEventListener('resize', fit);
+    core = model.internalModel.coreModel;
+    window.__stage = { core: core, model: model };
+    // 我们的驱动接管头身参数；保留物理（头发/耳朵）。
+    try { model.internalModel.motionManager.stopAllMotions(); } catch (e) {}
+    read('模型已加载。选一个音频文件开始。');
+  } catch (err) {
+    read('模型加载失败：' + (err && err.message ? err.message : err));
+    console.error(err);
+    return;
+  }
+
+  const groove = new MusicGroove({ style: 'auto', intensity: 1, variation: 0.8, seed: 'neko' });
+  let liveState = null, liveLastEnergy = 0, liveBeat = 0;
+  const liveBox = document.getElementById('live');
+  setInterval(() => {
+    if (!liveBox.checked) return;
+    fetch('./state.json', { cache: 'no-store' })
+      .then(r => r.json())
+      .then(st => { liveState = st; document.getElementById('song').textContent = st.song || ''; })
+      .catch(() => { liveState = null; });
+  }, 250);
+  let frame = groove.frame;
+  let hudTick = 0;
+  window.__stageLoaded = true;
+  let visemeState = null;
+  let visemeCues = null;
+
+  function apply() {
+    if (!core) return;
+    MusicGroove.applyToModel(core, frame, { gain: 1, breathBase: 0.45 });
+    if (visemeState) MusicVisemes.applyToModel(core, visemeState);
+  }
+  model.internalModel.on('afterMotionUpdate', apply);
+  model.internalModel.on('beforeModelUpdate', apply);
+
+  // ---- audio ----
+  let ctx = null, analyser = null, source = null, audioEl = null, data = null;
+  let lastBeat = 0, bpm = 100, lastT = 0, beatEnv = 0;
+  const fileInput = document.getElementById('file');
+  const playBtn = document.getElementById('play');
+  const stopBtn = document.getElementById('stop');
+
+  function ensureAudio() {
+    if (ctx) return;
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.72;
+    data = new Uint8Array(analyser.frequencyBinCount);
+  }
+
+  playBtn.onclick = async () => {
+    ensureAudio();
+    if (!audioEl) {
+      const f = fileInput.files && fileInput.files[0];
+      if (!f) { read('先选一个音频文件。'); return; }
+      audioEl = new Audio(URL.createObjectURL(f));
+      audioEl.loop = true;
+      source = ctx.createMediaElementSource(audioEl);
+      source.connect(analyser);
+      analyser.connect(ctx.destination);
+    }
+    await ctx.resume();
+    audioEl.play();
+    visemeCues = buildCues();
+    read('播放中 · 律动已接管头/身体角度');
+  };
+  stopBtn.onclick = () => { if (audioEl) { audioEl.pause(); } read('已暂停'); };
+
+  function buildCues() {
+    const lines = document.getElementById('lyrics').value.split(/\n+/).filter(Boolean);
+    if (!lines.length || !audioEl || !isFinite(audioEl.duration)) return null;
+    const span = audioEl.duration / lines.length;
+    return MusicVisemes.fromLines(lines.map((text, i) => ({
+      text, start: i * span, end: (i + 1) * span
+    })));
+  }
+  document.getElementById('lips').onclick = () => {
+    visemeCues = buildCues();
+    read(visemeCues ? ('口型轨已生成：' + visemeCues.length + ' 个字') : '需要先播放音频并填写歌词');
+  };
+
+  function features() {
+    analyser.getByteFrequencyData(data);
+    const n = data.length;
+    let low = 0, mid = 0, high = 0, total = 0, weighted = 0;
+    for (let i = 0; i < n; i++) {
+      const v = data[i] / 255;
+      total += v;
+      weighted += v * i;
+      if (i < n * 0.12) low += v;
+      else if (i < n * 0.45) mid += v;
+      else high += v;
+    }
+    const energy = Math.min(1, (total / n) * 2.6);
+    const flux = Math.max(0, energy - beatEnv);
+    if (flux > 0.06 && performance.now() - lastBeat > 220) {
+      lastBeat = performance.now();
+      beatEnv = 1;
+    } else {
+      beatEnv *= 0.9;
+    }
+    return {
+      energy,
+      low: Math.min(1, low / (n * 0.12) * 1.8),
+      mid: Math.min(1, mid / (n * 0.33) * 1.8),
+      high: Math.min(1, high / (n * 0.55) * 2.2),
+      beat: beatEnv,
+      pitch: total > 0 ? Math.min(1, weighted / total / (n * 0.6)) : 0.5,
+      bpm: bpm,
+      silent: energy < 0.02
+    };
+  }
+
+  app.ticker.add(() => {
+    const now = performance.now();
+    const dt = Math.min(0.1, (now - lastT) / 1000 || 0.016);
+    lastT = now;
+    const playing = audioEl && !audioEl.paused;
+    let f;
+    if (playing) {
+      f = features();
+    } else if (liveBox.checked && liveState && liveState.ok) {
+      const e = Number(liveState.energy) || 0;
+      liveBeat = e - liveLastEnergy > 0.06 ? 1 : 0;
+      liveLastEnergy = e;
+      f = {
+        energy: e, low: liveState.low, mid: liveState.mid, high: liveState.high,
+        pitch: liveState.pitch, bpm: liveState.bpm || 100,
+        beat: liveBeat, silent: !!liveState.silent || !!liveState.paused
+      };
+    } else {
+      f = { energy: 0, beat: 0, silent: true, pitch: 0.5 };
+    }
+    frame = groove.update(f, dt);
+    if (visemeCues && playing) {
+      visemeState = MusicVisemes.sample(visemeCues, audioEl.currentTime % (audioEl.duration || 1));
+    }
+    const el = document.getElementById('intv');
+    el.textContent = document.getElementById('intensity').value;
+    hudTick = (hudTick + 1) % 12;
+    if (hudTick === 1 && core && window.__stageLoaded) {
+      const mode = playing ? '本地音频' : (liveBox.checked ? '跟随她' : '待机');
+      document.getElementById('read').textContent =
+        `能量 ${(f && f.energy ? f.energy : 0).toFixed(2)} · 风格 ${frame.style} · ` +
+        `头 ${frame.headRotation.toFixed(1)}° / 身 ${frame.bodyRotation.toFixed(1)}° · ${mode}`;
+    }
+  });
+
+  document.getElementById('intensity').oninput = (e) => { groove.intensity = Number(e.target.value); };
+  document.getElementById('style').onchange = (e) => { groove.mode = e.target.value; groove._pickStyle(0); };
+})();
+</script>
+</body>
+</html>

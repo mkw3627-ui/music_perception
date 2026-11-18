@@ -6,9 +6,8 @@ frames, output one bounded JSON line per request. A single loaded Whisper
 model is reused, with at most one outstanding request. No audio files saved.
 """
 from __future__ import annotations
-
-import contextlib
 import json
+import contextlib
 import os
 import pathlib
 import sys
@@ -49,9 +48,9 @@ def _persistent_main(vendor, model_dir, model_name):
         with contextlib.redirect_stdout(sys.stderr):
             import numpy as np
             if model_name.startswith('sing-'):
-                from music_perception.singing_backend import prepare_singing_model, transcribe_singing_candidate
+                from music_perception.singing_backend import (transcribe_singing_candidate, prepare_singing_model)
             else:
-                from music_perception.lyrics_backend import prepare_singing_model, transcribe_singing_candidate
+                from music_perception.lyrics_backend import (transcribe_singing_candidate, prepare_singing_model)
             from music_perception.lyrics_model_store import LyricsModelDownloadError
     except Exception as exc:
         publish_stage(status_file, 'failed', model=model_name, error_type=type(exc).__name__)

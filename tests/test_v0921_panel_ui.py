@@ -56,7 +56,10 @@ def test_no_frame_budget_ui():
 
 def test_ui_build_version_updated():
     text = _read(PANEL)
-    assert "0.9.21-onboarding-r1" in text
+    # 版本号会随迭代递增；只断言「两端一致」，不写死具体号。
+    from _version import panel_ui_build, ui_build
+    assert panel_ui_build() in text
+    assert panel_ui_build() == ui_build(), "前后端 UI build 不一致"
 
 
 def test_panel_imports_onboarding():

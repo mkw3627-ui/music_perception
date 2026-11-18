@@ -38,11 +38,11 @@ def test_stem_source_is_pinned_and_prioritized():
     official=downloader.source_urls('official')
     mirror=downloader.source_urls('mirror')
     assert official[0][0].endswith('官方')
-    assert mirror[0][0].startswith('HF-Mirror')
+    assert mirror[0][0].startswith('魔搭') and mirror[1][0].startswith('HF-Mirror')
     assert mirror[-1]==official[0]
     for title,url in official + mirror:
         assert url.startswith('https://')
-        assert '495f5b4625eb092fe1fbe336f0b67c847566e52e' in url
+        assert 'modelscope' in url or '495f5b4625eb092fe1fbe336f0b67c847566e52e' in url
         assert stem_mdx.MODEL_FILENAME in url
     assert stem_mdx.MODEL_SHA256=='317554b07fe1ea5279a77f2b1520a41ea4b93432560c4ffd08792c30fddf9adc'
 
@@ -171,7 +171,8 @@ def test_stem_worker_fails_over_and_ends_only_after_verification(monkeypatch,tmp
     calls=_fake_dependencies(monkeypatch,success_after=2)
     destination=tmp_path/'stems';status=tmp_path/'progress.json'
     assert downloader.main([str(destination),str(status),'mirror'])==0
-    assert len(calls)==2 and calls[0].startswith('https://hf-mirror.com')
+    assert len(calls)==2 and calls[0].startswith('https://www.modelscope.cn')
+    assert calls[1].startswith('https://hf-mirror.com')
     result=json.loads(status.read_text('utf8'))
     assert result['state']=='ready' and result['sha256_verified'] is True
     assert result['pct']==100
@@ -192,7 +193,7 @@ def test_stem_worker_failure_is_visible_and_never_claims_success(monkeypatch,tmp
     calls=_fake_dependencies(monkeypatch,success_after=20)
     destination=tmp_path/'stems';status=tmp_path/'progress.json'
     assert downloader.main([str(destination),str(status),'official'])==1
-    assert len(calls)==3
+    assert len(calls)==4
     record=json.loads(status.read_text('utf8'))
     assert record['state']=='failed' and record['sha256_verified'] is False
     assert not (destination/stem_mdx.MODEL_FILENAME).exists()

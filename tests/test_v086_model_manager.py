@@ -27,12 +27,15 @@ def test_model_plans_are_explanations_not_hard_gpu_requirements():
 def test_stem_downloads_reference_same_pinned_file_on_every_host():
     for priority in ('mirror','official'):
         sources=stem_prepare_worker.source_urls(priority)
-        assert len(sources)==3 and len(set(url for name,url in sources))==3
+        assert len(sources)==4 and len(set(url for name,url in sources))==4
         for name,url in sources:
             assert url.startswith('https://')
+            if 'modelscope' in url:
+                assert url.endswith('/UVR-MDX-NET-Inst_HQ_3.onnx')
+                continue
             assert '495f5b4625eb092fe1fbe336f0b67c847566e52e' in url
             assert url.endswith('/UVR-MDX-NET-Inst_HQ_3.onnx?download=true')
-    assert stem_prepare_worker.source_urls('mirror')[0][0].startswith('HF-Mirror')
+    assert stem_prepare_worker.source_urls('mirror')[0][0].startswith('魔搭')
     assert stem_prepare_worker.source_urls('official')[0][0].startswith('Hugging Face')
 
 

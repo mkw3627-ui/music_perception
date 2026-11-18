@@ -18,15 +18,16 @@ def test_all_multilingual_tiers_have_pinned_model_and_three_allowlisted_sources(
     for name,spec in store.MODELS.items():
         assert not spec['repo'].endswith('.en')
         assert len(spec['sha256'])==64
-        for endpoint in store.PUBLIC_SOURCES:
+        for endpoint in store.PUBLIC_SOURCES+(store.MODELSCOPE,):
             url=store._direct_file_url(endpoint,name,'model.bin')
             assert '/resolve/' in url and '/model.bin' in url
             assert url.startswith(endpoint+'/')
     monkeypatch.setenv('NEKO_LYRICS_DOWNLOAD_PRIORITY','mirror')
     assert store._safe_sources(True)==(
-        'https://hf-mirror.com','https://hf-mirror.net','https://huggingface.co')
+        store.MODELSCOPE,'https://hf-mirror.com','https://hf-mirror.net','https://huggingface.co')
     monkeypatch.setenv('NEKO_LYRICS_DOWNLOAD_PRIORITY','official')
     assert store._safe_sources(True)[0]=='https://huggingface.co'
+    assert store._safe_sources(True)[-1]==store.MODELSCOPE
     assert store._safe_sources(False)==('https://huggingface.co',)
 
 

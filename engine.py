@@ -310,7 +310,7 @@ def analyze_waveform(wave, *, display_name: str = "当前播放的音乐片段",
     weights = np.maximum(spec.sum(axis=0), 1e-7)
     chroma_mean = np.average(chroma, axis=1, weights=weights)
     key = _key_estimate(chroma_mean)
-    from .music_harmony import beat_accent_candidates, chord_change_candidates, metrical_grouping_candidates
+    from .music_harmony import chord_change_candidates, beat_accent_candidates, metrical_grouping_candidates
     chord_evidence = chord_change_candidates(chroma, sample_rate=SAMPLE_RATE,
                                              hop_length=HOP, duration=duration)
     accent_evidence = beat_accent_candidates(beats, onset, sample_rate=SAMPLE_RATE,

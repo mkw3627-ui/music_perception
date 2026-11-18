@@ -36,11 +36,16 @@ def source_urls(priority, quality='ultra'):
     # This preserves existing resumable downloads after an in-place upgrade.
     if quality == 'ultra':
         file='/Politrees/UVR_resources/resolve/495f5b4625eb092fe1fbe336f0b67c847566e52e/MDXNet_models/UVR-MDX-NET-Inst_HQ_3.onnx?download=true'
+        try:
+            from .stem_catalog import MODELSCOPE_STEM_BASE
+        except ImportError:
+            from stem_catalog import MODELSCOPE_STEM_BASE
+        modelscope=('魔搭 ModelScope',MODELSCOPE_STEM_BASE+'UVR-MDX-NET-Inst_HQ_3.onnx')
         sources=[('Hugging Face 官方','https://huggingface.co'+file),
                  ('HF-Mirror 公益镜像','https://hf-mirror.com'+file),
                  ('HF-Mirror 备用节点','https://hf-mirror.net'+file)]
-        if priority=='mirror':return [sources[1],sources[2],sources[0]]
-        if priority=='official':return sources
+        if priority=='mirror':return [modelscope,sources[1],sources[2],sources[0]]
+        if priority=='official':return sources+[modelscope]
         raise ValueError('无效下载来源')
     try:
         from .stem_catalog import urls_for

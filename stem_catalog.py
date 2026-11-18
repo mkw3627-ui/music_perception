@@ -6,7 +6,6 @@ and provide an A/B preview; a more expensive preset can sound worse on some
 music. Four different published ONNX weights, no silent downloads.
 """
 from __future__ import annotations
-
 from pathlib import Path
 
 # SHA-256 and file size sourced from the pinned published Hugging Face file
@@ -50,6 +49,8 @@ STEM_PROFILES = {
     },
 }
 DEFAULT_STEM_QUALITY = 'ultra'  # Retains existing model/filename after upgrade.
+# 魔搭上的 UVR MDX-Net 合集，四档文件名与 SHA-256 均和上面一致（2026-11 核对）。
+MODELSCOPE_STEM_BASE = 'https://www.modelscope.cn/models/pengzhendong/uvr-mdx-net/resolve/master/'
 
 
 def spec(quality: str) -> dict:
@@ -66,14 +67,15 @@ def urls_for(quality: str, priority: str = 'mirror') -> list[tuple[str,str]]:
     profile=spec(quality)
     filename = profile['file']
     path = f"/{profile['repo']}/resolve/main/{filename}?download=true"
+    modelscope = ('魔搭 ModelScope', MODELSCOPE_STEM_BASE + filename)
     entries = [
         ('HF Mirror', 'https://hf-mirror.com'+path),
         ('Hugging Face 官方', 'https://huggingface.co'+path),
     ]
     if priority == 'mirror':
-        return entries
+        return [modelscope] + entries
     if priority == 'official':
-        return entries[::-1]
+        return entries[::-1] + [modelscope]
     raise ValueError('无效下载来源')
 
 

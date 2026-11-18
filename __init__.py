@@ -8,91 +8,66 @@ import math
 import os
 import queue
 import secrets
-import sys
 import threading
+import sys
 import time
 from pathlib import Path
 from typing import Annotated, Any
 
 from plugin.sdk.plugin import (
-    NekoPluginBase,
-    Ok,
-    lifecycle,
-    llm_tool,
-    neko_plugin,
-    plugin_entry,
-    ui,
+    NekoPluginBase, Ok, lifecycle, llm_tool, neko_plugin, plugin_entry, ui,
 )
 
-from .analysis_bridge import AnalysisWorkerCancelled, AnalysisWorkerError, analyze_pcm_isolated
-from .app_channels import (
-    BROWSER_APPLICATIONS,
-    CAPTURE_MODES,
-    MUSIC_APPLICATIONS,
-    VIDEO_APPLICATIONS,
-    browser_executable,
-    choose_title_evidence,
-    list_app_processes,
-    normalized_exe_path,
-    process_image_path,
-    selected_scene,
-    tag_application,
-    verify_selected_process,
-)
-from .app_source_recovery import find_replacement
-from .audio_dispatch import PrivateAudioBus, SourceLabels
-from .audio_dispatch import source_id as make_source_id
+from .engine import AudioAnalysisError, EXTENSIONS, analyze_audio, analyze_waveform, brief_for_ai
+from .auto_listener import LiveListener, ListenerError, FinishedClip
 from .audio_scene import classify_scene, normal_role
-from .auto_listener import FinishedClip, ListenerError, LiveListener
-from .cognitive_bridge_v1 import HearingCognitiveBridgeV1
-from .engine import EXTENSIONS, AudioAnalysisError, analyze_audio, analyze_waveform, brief_for_ai
-from .glance import GLANCE_INTERVAL_S, GlanceScheduler
+from .isolated_loopback import IsolatedWindowsLoopback, IsolatedApplicationLoopback
 from .host_llm import HostAppClassifier
-from .isolated_loopback import IsolatedApplicationLoopback, IsolatedWindowsLoopback
-from .lyric_timing import align_lyrics_to_music
-from .lyrics_bridge import LyricsModelDownloadError, LyricsWorkerError, PersistentLyricsSession, recognize_pcm_isolated
-from .lyrics_continuity import join_song_audio, merge_song_lyrics
-from .lyrics_device_capabilities import probe_cuda_isolated
-from .lyrics_sync import load_adjacent_lrc
+from .app_channels import (list_app_processes, verify_selected_process,
+                           selected_scene, CAPTURE_MODES, tag_application,
+                           process_image_path, normalized_exe_path, browser_executable,
+                           choose_title_evidence, MUSIC_APPLICATIONS,
+                           BROWSER_APPLICATIONS, VIDEO_APPLICATIONS)
+from .window_titles import titles_by_pid, windows_by_pid, foreground_window, resolve_titles
+from .song_titles import parse_player_window_title
+from .windows_audio_sessions import scan_audible_sessions
+from .app_source_recovery import find_replacement
+from .audio_dispatch import PrivateAudioBus, SourceLabels, source_id as make_source_id
 from .media_modes import MediaModeFile, detect_game
-from .media_session_bridge import read_system_media
-from .music_events import compact_music_context, enrich_with_user_lrc, offset_event_timeline
-from .player_lyrics import find_authorized_player_lrc, preview_player_lyrics
+from .vision_review import (VisionReviewPolicy, REVIEW_LABEL_TTL_S, app_matches,
+                            classify_observation, reviewable_tag, pick_review_target,
+                            pick_capture_target, normalize_app)
 from .process_capture_installer import ProcessCaptureInstaller
 from .runtime_environment import MusicEnvironment, model_valid
-from .song_memory import QUALITY_MODEL, RecentSongMemory, audio_segment_fingerprint, trusted_song_identity
-from .song_titles import parse_player_window_title
-from .spectral_context import ai_auditory_context, auxiliary_cues, condensed_history_item, spectrum_for_ai
-from .speech_timeline import annotate_video_evidence, music_phrases, video_sentences
+from .analysis_bridge import analyze_pcm_isolated, AnalysisWorkerError, AnalysisWorkerCancelled
+from .spectral_context import spectrum_for_ai, auxiliary_cues, ai_auditory_context, condensed_history_item
+from .music_events import offset_event_timeline, compact_music_context, enrich_with_user_lrc
+from .lyrics_sync import load_adjacent_lrc
+from .player_lyrics import find_authorized_player_lrc, preview_player_lyrics
+from .lyrics_bridge import recognize_pcm_isolated, PersistentLyricsSession, LyricsWorkerError, LyricsModelDownloadError
+from .lyric_timing import align_lyrics_to_music
+from .media_session_bridge import read_system_media
+from .song_memory import RecentSongMemory, QUALITY_MODEL, trusted_song_identity, audio_segment_fingerprint
+from .lyrics_continuity import join_song_audio, merge_song_lyrics
+from .lyrics_device_capabilities import probe_cuda_isolated
+from .stem_mdx import MODEL_FILENAME as STEM_MODEL_FILENAME, MODEL_SOURCE as STEM_MODEL_SOURCE, verify_model as verify_stem_model
 from .stem_bridge import PersistentStemSession, StemWorkerError
-from .stem_catalog import DEFAULT_STEM_QUALITY, STEM_PROFILES
-from .stem_catalog import overview as stem_overview
-from .stem_catalog import path_for as stem_path_for
-from .stem_catalog import verify_local_model as verify_stem_tier
-from .stem_gpu_runtime import inventory as stem_gpu_inventory
-from .stem_gpu_runtime import overlay_path as stem_gpu_overlay_path
-from .stem_mdx import MODEL_FILENAME as STEM_MODEL_FILENAME
-from .stem_mdx import MODEL_SOURCE as STEM_MODEL_SOURCE
-from .stem_mdx import verify_model as verify_stem_model
+from .stem_gpu_runtime import (overlay_path as stem_gpu_overlay_path,
+                               inventory as stem_gpu_inventory)
+from .stem_catalog import (STEM_PROFILES, DEFAULT_STEM_QUALITY, path_for as stem_path_for,
+                           overview as stem_overview, verify_local_model as verify_stem_tier)
+from .speech_timeline import music_phrases, video_sentences, annotate_video_evidence
 from .video_series import infer_video_position
 from .video_window import decide_video_window
-from .vision_review import (
-    REVIEW_LABEL_TTL_S,
-    VisionReviewPolicy,
-    app_matches,
-    classify_observation,
-    normalize_app,
-    pick_capture_target,
-    pick_review_target,
-    reviewable_tag,
-)
-from .window_titles import foreground_window, resolve_titles, titles_by_pid, windows_by_pid
-from .windows_audio_sessions import scan_audible_sessions
+from .glance import GlanceScheduler, GLANCE_INTERVAL_S
+from .cognitive_bridge_v1 import HearingCognitiveBridgeV1
 
 # Two video watch tiers. 'balanced' = frames + speech evidence (default);
 # 'efficient' = frames only, for low-end machines.
 VIDEO_WATCH_MODES = frozenset({'balanced', 'efficient'})
 DEFAULT_VIDEO_WATCH_MODE = 'balanced'
+# 「为她所控」可用性探测的缓存时长（秒）：面板每 5 秒刷新，不必每次都跨插件问。
+SUOKONG_PROBE_TTL = 30.0
 # User-selected per-video frame cap for vision reading (kept small by default to limit cost).
 VIDEO_FRAME_BUDGETS = frozenset({10, 30, 50})
 # Background vision review: a candidate video/music app is confirmed by the
@@ -180,43 +155,28 @@ GLANCE_VERDICT_FRAMES = 3
 # cross-plugin RPC timeout so it always covers every requested frame.
 GLANCE_FRAME_COST_S = 25.0
 GLANCE_TIMEOUT_CEILING_S = 240.0
-from .adaptive_resources import DEFAULT_RESERVE_MIB, PressureTracker, free_system_ram_mib, gpu_memory, select_model
-from .adaptive_resources import DOMAINS as RESOURCE_DOMAINS
-from .adaptive_resources import TIERS as RESOURCE_TIERS
-from .lyrics_diagnostics import diagnose_stall, read_stage
-from .model_assets import STEM_EXPECTED_BYTES, free_disk_check, model_plan, remove_plugin_model_dir, remove_stem_model
-from .onboarding import (
-    OnboardingInstaller,
-    OnboardingStore,
-    picker_cancel,
-    picker_start,
-    picker_wait,
-    recommend,
-    scan_environment,
-    validate_storage_root,
-)
-from .singing_catalog import PROFILES as SINGING_PROFILES
-from .singing_catalog import inventory as singing_inventory
-from .singing_catalog import verified_folder as verified_singing_folder
+from .model_assets import (model_plan, free_disk_check, remove_plugin_model_dir,
+                           remove_stem_model, STEM_EXPECTED_BYTES)
+from .lyrics_diagnostics import read_stage, diagnose_stall
+from .singing_catalog import PROFILES as SINGING_PROFILES, inventory as singing_inventory, verified_folder as verified_singing_folder
 from .singing_install import (
+    ensure_environment as ensure_singing_environment, paths as singing_venv_paths,
+    private_environment_status, uninstall_environment as remove_singing_private_venv,
     SingingInstallCancelled,
-    private_environment_status,
 )
-from .singing_install import (
-    ensure_environment as ensure_singing_environment,
-)
-from .singing_install import (
-    paths as singing_venv_paths,
-)
-from .singing_install import (
-    uninstall_environment as remove_singing_private_venv,
-)
+from .adaptive_resources import (
+    DOMAINS as RESOURCE_DOMAINS, TIERS as RESOURCE_TIERS,
+    gpu_memory, select_model, PressureTracker, DEFAULT_RESERVE_MIB, free_system_ram_mib)
+from .onboarding import (
+    OnboardingStore, OnboardingInstaller, validate_storage_root,
+    scan_environment, recommend, picker_start, picker_wait, picker_cancel)
+
 
 # Keep the plugin worker responsive while the host finishes its startup handshake.
 # Optional installer/model preparation begins only after the lifecycle hook has returned.
 ENVIRONMENT_START_DELAY_SECONDS = 6.0
 # Legacy UI protocol superseded: 0.9.0-audible-app-tags-r1
-UI_PROTOCOL_BUILD = "0.9.21-onboarding-r1"
+UI_PROTOCOL_BUILD = "0.9.22-suokong-gate-r1"
 
 ANALYZE_SCHEMA = {
     "type": "object",
@@ -585,6 +545,29 @@ class MusicPerceptionPlugin(NekoPluginBase):
         if hasattr(raw, "__await__"):
             raw = await raw
         return getattr(raw, "value", raw)
+
+    async def _suokong_available(self, *, force: bool = False) -> bool:
+        """「为她所控」(browser_history_insights) 是否可用。
+
+        视频链路（截帧、官方歌词、B站反查）全靠这个兄弟插件，没装就不能用。
+        探测方式：调它的只读轻量入口 presence_status_v1 —— 不截屏、不耗资源。
+        结果缓存 SUOKONG_PROBE_TTL 秒，避免面板每 5 秒刷新都打一次跨插件调用。
+        任何异常都按「不可用」处理（fail-closed），不会误导用户。
+        """
+        now = time.time()
+        cached = getattr(self, '_suokong_cached', None)
+        if (not force and isinstance(cached, tuple) and len(cached) == 2
+                and now - float(cached[1]) < SUOKONG_PROBE_TTL):
+            return bool(cached[0])
+        ok = False
+        try:
+            value = await self._call_entry(
+                "browser_history_insights:presence_status_v1", {}, timeout=3.0)
+            ok = isinstance(value, dict) and bool(value.get('state'))
+        except Exception:  # noqa: BLE001 - 兄弟插件不可用时安静降级
+            ok = False
+        self._suokong_cached = (ok, now)
+        return ok
 
     async def _read_companion_mood(self) -> None:
         """Read-only mood from forever_companion. Any failure means unknown."""
@@ -1455,7 +1438,7 @@ class MusicPerceptionPlugin(NekoPluginBase):
                     "ram_free_mib": 0, "reserve_mib": int(getattr(self, '_resource_reserve_mib', 2048))}
         recommend_result = {}
         try:
-            from .adaptive_resources import free_system_ram_mib, gpu_memory
+            from .adaptive_resources import gpu_memory, free_system_ram_mib
             gpu = gpu_memory(timeout=1.8)
             ram = free_system_ram_mib()
             hardware = {"gpu_name": "", "gpu_available": bool(gpu.get('available')),
@@ -1486,9 +1469,9 @@ class MusicPerceptionPlugin(NekoPluginBase):
 
     def _onboarding_catalogs(self) -> dict:
         """把各档位的显存/大小估算汇总给 recommend（只读，不下载）。"""
-        from .model_assets import ASR_GPU_PLANS
-        from .singing_catalog import PROFILES as SINGING_PROFILES
         from .stem_catalog import STEM_PROFILES
+        from .singing_catalog import PROFILES as SINGING_PROFILES
+        from .model_assets import ASR_GPU_PLANS
         video = {q: {"vram_mib": int(vram[0]), "bytes": 0}
                  for q, vram in ASR_GPU_PLANS.items()}
         singing = {q: {"vram_mib": int(d['suggested_free_vram_mib']),
@@ -1515,7 +1498,7 @@ class MusicPerceptionPlugin(NekoPluginBase):
             data = tomllib.loads((Path(__file__).resolve().parent / 'pyproject.toml').read_text(encoding='utf-8'))
             return str(data['project']['version'])
         except Exception:  # noqa: BLE001 - 读不到时给一个稳定占位，不崩状态接口
-            return '0.9.21'
+            return '0.9.22'
 
     async def _prepare_runtime_environment(self, *, defer: bool = False):
         try:
@@ -1579,8 +1562,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
             except Exception:  # noqa: BLE001
                 pass
         try:
-            from .live2d_stage_server import stop_all as _stop_stage_servers
-            from .live2d_stage_server import stop_bridge_server
+            from .live2d_stage_server import (stop_all as _stop_stage_servers,
+                                              stop_bridge_server)
             _stop_stage_servers()
             stop_bridge_server()
         except Exception:  # noqa: BLE001 - 关停失败不影响插件卸载
@@ -1903,7 +1886,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
                                                   deep=False) is not None
                     for key in RESOURCE_TIERS}
         if domain=='video':
-            from .lyrics_model_store import candidate_model_directories, inspect_model_files, sidecar_stat_signature
+            from .lyrics_model_store import (inspect_model_files,sidecar_stat_signature,
+                candidate_model_directories)
             root=self.data_path('models')/'whisper_multilingual'
             output={}
             for key,model in QUALITY_MODEL.items():
@@ -6105,8 +6089,7 @@ class MusicPerceptionPlugin(NekoPluginBase):
             'limit':{'type':'integer','minimum':1,'maximum':32}}},
         timeout=8.0)
     async def cog_poll_v1(self,cursor:str='',limit:int=20,**_):
-        import hashlib
-        import json
+        import hashlib, json
         from datetime import datetime, timedelta, timezone
         def batch(status,reason='',message='',observations=None,next_cursor=''):
             return Ok({'schema_version':'cognition.observation.v1','source_plugin':'music_perception',
@@ -7241,6 +7224,7 @@ class MusicPerceptionPlugin(NekoPluginBase):
         store = getattr(self, '_onboarding_store', None)
         if store is None or not store.load().get('storage_root'):
             return Ok({'ok': False, 'error': '请先选择并确认安装位置'})
+        self._onboarding_loop = asyncio.get_running_loop()
         self._onboarding_start_install_impl(items or [], choices or {})
         return Ok({'ok': True, 'jobs': self._onboarding_installer.snapshot()})
 
@@ -7292,10 +7276,133 @@ class MusicPerceptionPlugin(NekoPluginBase):
             installer.add_job('yamnet', '声音分类模型',
                               lambda: self._environment._download_model(),
                               progress=lambda: self._environment.snapshot().get('model_download'))
-        # 其余项（歌词/分离/唱歌/GPU/应用声道）由 flash 集成阶段逐步接入，
-        # 本轮接线只保证 action 注册与队列骨架，避免误触发大模型下载。
+        # 其余可选项复用各自面板里的下载入口（同一套 SHA 校验 / 断点 / 换源），
+        # 这里只负责按顺序排队、等它结束、把进度转成进度卡格式。
+        tiers = {'low', 'medium', 'high', 'ultra'}
+        choices = choices if isinstance(choices, dict) else {}
+        video_q = choices.get('video_quality') if choices.get('video_quality') in tiers else 'medium'
+        sing_q = choices.get('singing_quality') if choices.get('singing_quality') in tiers else 'medium'
+        stem_q = choices.get('stem_quality') if choices.get('stem_quality') in tiers else 'low'
+        device = 'cuda' if choices.get('device') == 'cuda' else 'cpu'
+        source = getattr(self, '_download_source_preference', 'mirror')
+        if 'lyrics_model' in wanted:
+            installer.add_job('lyrics_model', '视频语音模型',
+                              lambda: self._onboarding_lyrics_job(video_q, source),
+                              progress=lambda: self._onboarding_lyrics_progress(video_q))
+        if 'stem_model' in wanted:
+            installer.add_job('stem_model', '人声分离模型',
+                              lambda: self._onboarding_stem_job(stem_q, source),
+                              progress=self._stem_download_snapshot)
+        if 'singing' in wanted:
+            installer.add_job('singing', '唱歌识别环境',
+                              lambda: self._onboarding_singing_job(sing_q, source, device),
+                              progress=lambda: self._onboarding_singing_progress(sing_q))
+        if 'app_capture' in wanted:
+            installer.add_job('app_capture', '应用声道组件',
+                              lambda: self._onboarding_capture_job(source),
+                              progress=self._process_capture_install.status)
         # 加完任务必须真正启动串行执行线程；只入队不执行会让进度卡永远停在 queued。
         installer.run_all()
+
+    def _onboarding_call(self, coro, timeout: float = 60.0):
+        """在安装线程里调用 async 入口：投递到插件事件循环并等待返回值。"""
+        loop = getattr(self, '_onboarding_loop', None)
+        if loop is None or loop.is_closed():
+            return asyncio.run(coro)
+        return asyncio.run_coroutine_threadsafe(coro, loop).result(timeout=timeout)
+
+    @staticmethod
+    def _onboarding_result(value) -> dict:
+        data = getattr(value, 'value', value)
+        return data if isinstance(data, dict) else {}
+
+    def _onboarding_wait(self, thread_attr: str, limit: float = 4 * 3600) -> None:
+        """等后台下载线程结束；用户取消引导下载时不强杀，只停止等待。"""
+        end = time.monotonic() + limit
+        installer = self._onboarding_installer
+        while time.monotonic() < end:
+            thread = getattr(self, thread_attr, None)
+            if thread is None or not thread.is_alive():
+                return
+            if installer.cancelled():
+                raise RuntimeError('已取消；后台下载会保留断点')
+            thread.join(timeout=1.0)
+
+    @staticmethod
+    def _onboarding_read_json(path) -> dict:
+        try:
+            info = json.loads(Path(path).read_text('utf-8')) if Path(path).is_file() else {}
+        except (OSError, ValueError):
+            info = {}
+        return info if isinstance(info, dict) else {}
+
+    def _onboarding_lyrics_job(self, quality: str, source: str) -> dict:
+        result = self._onboarding_result(self._onboarding_call(
+            self.stage_lyrics_model(quality=quality, download_source=source, confirmed=True)))
+        if not result.get('ok'):
+            return {'ok': False, 'error': result.get('error') or '视频语音模型未能开始下载'}
+        self._onboarding_wait('_lyrics_prepare_thread')
+        state = dict(getattr(self, '_lyrics_prepare_state', {}))
+        if state.get('state') == 'ready' or result.get('model_loaded'):
+            return {'ok': True}
+        return {'ok': False, 'error': state.get('message') or '视频语音模型下载未完成'}
+
+    def _onboarding_lyrics_progress(self, quality: str) -> dict:
+        model = QUALITY_MODEL.get(quality, '')
+        info = self._onboarding_read_json(self.data_path('lyrics_model_prepare_' + model + '.json'))
+        return {'state': 'running', 'stage': info.get('phase') or info.get('stage') or '',
+                'bytes': info.get('received_bytes') or 0,
+                'total_bytes': info.get('expected_bytes') or info.get('expected_bytes_estimate') or 0,
+                'source': info.get('source_name') or ''}
+
+    def _onboarding_stem_job(self, quality: str, source: str) -> dict:
+        result = self._onboarding_result(self._onboarding_call(
+            self.start_stem_download(confirmed=True, download_source=source, quality=quality)))
+        if not result.get('ok'):
+            return {'ok': False, 'error': result.get('error') or '人声分离模型未能开始下载'}
+        if not result.get('already_installed'):
+            self._onboarding_wait('_stem_download_thread')
+        if verify_stem_tier(self._stem_model_path(quality), quality):
+            return {'ok': True}
+        return {'ok': False, 'error': self._stem_download_snapshot().get('message') or '人声分离模型下载未完成'}
+
+    def _onboarding_singing_job(self, quality: str, source: str, device: str) -> dict:
+        root = self.data_path('models') / 'singing_specialist'
+        if verified_singing_folder(root, quality, deep=False) is not None:
+            return {'ok': True}
+        result = self._onboarding_result(self._onboarding_call(
+            self.install_singing_model(quality=quality, source=source, device=device, confirmed=True)))
+        if not result.get('ok'):
+            return {'ok': False, 'error': result.get('error') or '唱歌识别环境未能开始安装'}
+        self._onboarding_wait('_singing_prepare_thread')
+        state = dict(getattr(self, '_singing_prepare_state', {}))
+        if state.get('state') == 'ready':
+            return {'ok': True}
+        return {'ok': False, 'error': state.get('error') or '唱歌识别环境安装未完成'}
+
+    def _onboarding_singing_progress(self, quality: str) -> dict:
+        state = dict(getattr(self, '_singing_prepare_state', {}))
+        info = self._onboarding_read_json(
+            self.data_path('models') / 'singing_specialist' / f'singing_download_{quality}.json')
+        return {'state': 'running', 'stage': str(state.get('stage') or info.get('stage') or ''),
+                'bytes_received': info.get('bytes_received') or 0,
+                'total_bytes': info.get('total_bytes') or 0,
+                'progress_pct': info.get('progress_pct'),
+                'speed_bytes_s': info.get('speed_bytes_s'), 'eta_seconds': info.get('eta_seconds'),
+                'source_name': info.get('source_name') or '',
+                'indeterminate': not info.get('bytes_received')}
+
+    def _onboarding_capture_job(self, source: str) -> dict:
+        capture = self._process_capture_install
+        result = capture.start(confirmed=True, env=self._environment, source=source)
+        if not result.get('ok'):
+            return {'ok': False, 'error': result.get('error') or '应用声道组件未能开始安装'}
+        thread = getattr(capture, '_thread', None)
+        if thread is not None:
+            thread.join(timeout=600)
+        if capture.installed():
+            return {'ok': True}
+        return {'ok': False, 'error': str(capture.status().get('message') or '应用声道组件安装未完成')}
 
     def _stem_gpu_install_status(self):
         """Lightweight model UI snapshot; no downloads or CUDA import on refresh."""
@@ -7579,9 +7686,7 @@ class MusicPerceptionPlugin(NekoPluginBase):
         pcm=snap.get('tracks',{}).get(stage)
         if not pcm or len(pcm)>225000:
             return Ok({'ok':False,'error':'试听缓存不存在或超出允许范围'})
-        import base64
-        import io
-        import wave
+        import base64,io,wave
         buffer=io.BytesIO()
         with wave.open(buffer,'wb') as wav:
             wav.setnchannels(1);wav.setsampwidth(2);wav.setframerate(16000)
@@ -8148,12 +8253,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
                             # verdict, with unchanged size AND nanosecond
                             # mtime, and with complete valid CT2 sidecars.
                             # Activation rehashes before loading.
-                            from .lyrics_model_store import (
-                                REQUIRED_FILES,
-                                candidate_model_directories,
-                                sidecar_stat_signature,
-                                validate_sidecar_file,
-                            )
+                            from .lyrics_model_store import (candidate_model_directories,
+                                sidecar_stat_signature, REQUIRED_FILES, validate_sidecar_file)
                             intact = False
                             for folder, origin in candidate_model_directories(model,root):
                                 try:
@@ -8269,9 +8370,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
         # Record the verified file identity for inexpensive Hosted-UI reads.
         # Do not write a green badge until the full SHA and sidecars passed.
         try:
-            import json as _json
-
             from .lyrics_model_store import sidecar_stat_signature
+            import json as _json
             verified_path=Path(verified)
             weight=verified_path/'model.bin'
             stat=weight.stat()
@@ -8686,7 +8786,7 @@ class MusicPerceptionPlugin(NekoPluginBase):
     # 和 templates/index.html 里实际那一行保持一致；版本号走主程序的 static_asset_version，
     # 这样主程序更新时会自动失效缓存，也不会因为标记对不上被重复插入一次。
     _BRIDGE_TAG = ('<script src="/static/live2d/music-groove-bridge.js'
-                   '?v={{ static_asset_version }}-lips4-g64"></script>')
+                   '?v={{ static_asset_version }}-lips4-g73"></script>')
 
     def _app_bin_dir(self) -> Path | None:
         """Locate the running app's resources/bin (templates + static live there)."""
@@ -8765,11 +8865,19 @@ class MusicPerceptionPlugin(NekoPluginBase):
                 _shutil.copy2(index, backup)
             except OSError as exc:
                 return Ok({"ok": False, "error": f"备份 index.html 失败，未做修改：{exc}"})
-        if 'live2d-init.js' not in html:
-            return Ok({"ok": False, "error": "index.html 里找不到 live2d-init.js，未做修改"})
-        patched = html.replace(
-            '<script src="/static/live2d/live2d-init.js',
-            self._BRIDGE_TAG + '\n    <script src="/static/live2d/live2d-init.js', 1)
+        import re as _re
+        _old_bridge = _re.compile(
+            r'<script src="/static/live2d/music-groove-bridge\.js[^>]*></script>')
+        if _old_bridge.search(html):
+            # 版本升级：index 里已装过旧版桥标签（-lips4-g<旧>），把那一行换成当前
+            # _BRIDGE_TAG，而不是再插一条（否则会重复加载驱动脚本）。
+            patched = _old_bridge.sub(self._BRIDGE_TAG, html, count=1)
+        else:
+            if 'live2d-init.js' not in html:
+                return Ok({"ok": False, "error": "index.html 里找不到 live2d-init.js，未做修改"})
+            patched = html.replace(
+                '<script src="/static/live2d/live2d-init.js',
+                self._BRIDGE_TAG + '\n    <script src="/static/live2d/live2d-init.js', 1)
         try:
             tmp = index.with_suffix('.html.neko-tmp')
             tmp.write_text(patched, encoding='utf-8')
@@ -8801,9 +8909,11 @@ class MusicPerceptionPlugin(NekoPluginBase):
         try:
             if index.is_file():
                 html = index.read_text(encoding='utf-8')
-                if self._BRIDGE_TAG in html:
-                    html = html.replace(self._BRIDGE_TAG + '\n    ', '', 1)
-                    html = html.replace(self._BRIDGE_TAG, '', 1)
+                import re as _re
+                _old_bridge_line = _re.compile(
+                    r'[ \t]*<script src="/static/live2d/music-groove-bridge\.js[^>]*></script>\n?')
+                if _old_bridge_line.search(html):
+                    html = _old_bridge_line.sub('', html, count=1)
                     tmp = index.with_suffix('.html.neko-tmp')
                     tmp.write_text(html, encoding='utf-8')
                     tmp.replace(index)
@@ -9019,7 +9129,7 @@ class MusicPerceptionPlugin(NekoPluginBase):
                         (selected is None or saved.get('model')==selected)):
                     # A previous completed download is useful, but a stale
                     # 'running' record from an earlier process is not live.
-                    if memory.get('state') not in {'queued','running'}:
+                    if not (memory.get('state') in {'queued','running'}):
                         memory = saved
                     else:
                         memory['stage'] = saved.get('stage',memory.get('stage'))
@@ -9031,12 +9141,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
         # UI poll; the downloader still verifies the official SHA-256.
         if memory.get('state') == 'ready':
             try:
-                from .lyrics_model_store import (
-                    MODELS,
-                    REQUIRED_FILES,
-                    _sidecar_present_cheap,
-                    candidate_model_directories,
-                )
+                from .lyrics_model_store import (MODELS, REQUIRED_FILES,
+                    candidate_model_directories, _sidecar_present_cheap)
                 model=QUALITY_MODEL.get(getattr(self,'_lyrics_profile',None))
                 spec=MODELS.get(model) if model else None
                 if spec:
@@ -9630,6 +9736,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
                        'title': official.get('title'), 'artist': official.get('artist'),
                        'query': official.get('query'),
                        'lines': official_lines,
+                       # 带时间的原版歌词（给「为她而唱」排舞台；AI 读词仍用上面的 lines）
+                       'timed': [r for r in (official.get('timed') or []) if isinstance(r, dict)][:400],
                        'reason': official.get('reason')},
                    'source_kind':('lyrics' if song_lines else
                                   'video_speech' if video_lines else
@@ -9847,7 +9955,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
                     "video_last_error":getattr(self,'_video_last_error',None),
                     "video_watch_mode":getattr(self,'_video_watch_mode',DEFAULT_VIDEO_WATCH_MODE),
                     "video_suspect_cues":int((getattr(self,'_video_transcript',None) or {}).get('suspect_cues_count',0) or 0),
-                    "video_context_ready":bool(getattr(self,'_video_transcript',None))})
+                    "video_context_ready":bool(getattr(self,'_video_transcript',None)),
+                    "suokong_available":await self._suokong_available()})
 
 
     @plugin_entry(
@@ -9921,7 +10030,6 @@ class MusicPerceptionPlugin(NekoPluginBase):
 
         def work():
             import wave
-
             import numpy as np
             title_marks = []
             last_title = None

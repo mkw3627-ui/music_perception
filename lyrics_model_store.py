@@ -9,15 +9,15 @@ No N.E.K.O SDK import: this runs in the independently managed CPython worker.
 from __future__ import annotations
 
 import hashlib
-import http.client
 import json
 import os
-import re
-import urllib.error
 import urllib.request
+import urllib.error
+import http.client
+import re
+from urllib.parse import quote, urlparse
 from pathlib import Path
 from typing import Callable
-from urllib.parse import quote, urlparse
 
 
 class LyricsModelDownloadError(RuntimeError):
@@ -59,10 +59,20 @@ ALLOWED_FILES = ('config.json', 'model.bin', 'tokenizer.json', 'vocabulary.json'
 # Backup hosts are not trusted to choose model bytes: the pinned official
 # model.bin SHA-256 in MODELS remains mandatory for EVERY source.
 PUBLIC_SOURCES = ('https://huggingface.co', 'https://hf-mirror.com', 'https://hf-mirror.net')
+# 魔搭（ModelScope）托管了同一批权重，model.bin 的 SHA-256 与上面固定值一致；
+# 国内 2026-11 实测 10 MB/s 以上，hf-mirror 常只有几百 KB/s，所以镜像优先时排第一。
+MODELSCOPE = 'https://www.modelscope.cn'
+MODELSCOPE_REPOS = {
+    'tiny': 'Systran/faster-whisper-tiny',
+    'base': 'Systran/faster-whisper-base',
+    'small': 'Systran/faster-whisper-small',
+    'large-v3-turbo': 'pengzhendong/faster-whisper-large-v3-turbo',
+}
 SOURCE_TITLES = {
     'https://huggingface.co': 'Hugging Face 官方',
     'https://hf-mirror.com': 'HF-Mirror 公益镜像',
     'https://hf-mirror.net': 'HF-Mirror 备用节点',
+    MODELSCOPE: '魔搭 ModelScope',
 }
 # Only these files may be downloaded from the model repository.
 REQUIRED_FILES = {
@@ -323,8 +333,9 @@ def _safe_sources(allow_public_mirror: bool) -> tuple[str, ...]:
     if not allow_public_mirror:
         return (PUBLIC_SOURCES[0],)
     priority = (os.environ.get('NEKO_LYRICS_DOWNLOAD_PRIORITY') or 'official').lower()
-    order = (PUBLIC_SOURCES[1], PUBLIC_SOURCES[2], PUBLIC_SOURCES[0]) if priority == 'mirror' else PUBLIC_SOURCES
-    return tuple(order)
+    if priority == 'mirror':
+        return (MODELSCOPE, PUBLIC_SOURCES[1], PUBLIC_SOURCES[2], PUBLIC_SOURCES[0])
+    return PUBLIC_SOURCES + (MODELSCOPE,)
 
 
 def _notify(callback, phase: str, endpoint: str, filename: str = ''):
@@ -335,9 +346,13 @@ def _notify(callback, phase: str, endpoint: str, filename: str = ''):
 
 def _direct_file_url(endpoint: str, model_name: str, filename: str) -> str:
     """Use a pinned, public HTTPS model URL; no untrusted repo/file inputs."""
-    if endpoint not in PUBLIC_SOURCES or filename not in ('model.bin',) + ALLOWED_FILES:
+    if endpoint not in PUBLIC_SOURCES + (MODELSCOPE,) or filename not in ('model.bin',) + ALLOWED_FILES:
         raise ValueError('Source or model file not allowlisted')
     spec = MODELS[model_name]
+    if endpoint == MODELSCOPE:
+        # 魔搭没有 HF 的 commit 号；靠 model.bin 固定 SHA-256 保证是同一份权重。
+        return (MODELSCOPE + '/models/' + MODELSCOPE_REPOS[model_name]
+                + '/resolve/master/' + quote(filename, safe=''))
     revision = spec.get('revision', 'main')
     return endpoint + '/' + spec['repo'] + '/resolve/' + quote(revision, safe='') + '/' + quote(filename, safe='') + '?download=true'
 
@@ -630,6 +645,8 @@ def ensure_local_model(model_name: str, root: Path, *,
     # disabled for every mirror. Mocked downloader tests only exercise this
     # branch; production uses it after direct sources are exhausted.
     for endpoint in sources:
+        if endpoint == MODELSCOPE:
+            continue  # HF Hub 客户端不支持魔搭；魔搭只走上面的直链
         if downloader is None:
             errors.append(SOURCE_TITLES[endpoint]+'：未安装 huggingface-hub')
             continue

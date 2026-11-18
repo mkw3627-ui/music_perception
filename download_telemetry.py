@@ -76,6 +76,13 @@ def snapshot_bytes(folder):
     except OSError:
         pass
     pending = 0
+    try:
+        # 直链下载器（魔搭）写的是 <文件名>.partial
+        for entry in folder.glob('*.partial'):
+            if entry.is_file() and not entry.is_symlink() and entry.name[:-8] not in completed:
+                pending += max(0, entry.stat().st_size)
+    except OSError:
+        pass
     cache = folder / '.cache' / 'huggingface' / 'download'
     try:
         for entry in cache.glob('*.incomplete'):

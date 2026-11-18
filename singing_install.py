@@ -5,15 +5,15 @@ Do not install into system Python or the host's shared CUDA/Python environment.
 All commands use trusted, fixed package specifications without a shell.
 """
 from __future__ import annotations
-
 import os
+from pathlib import Path
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
-from pathlib import Path
 
 SINGING_WHISPER_PACKAGES = ('faster-whisper>=1.1,<2','huggingface-hub>=0.31,<2','numpy>=1.24,<3')
 SINGING_QWEN_PACKAGES = ('qwen-asr==0.0.6','huggingface-hub>=0.31,<2','numpy>=1.24,<3',
@@ -22,6 +22,13 @@ PRIVATE_ENV_NAME = 'singing_asr_venv'
 PRIVATE_LOG_NAME = 'singing_asr_install.log'
 PYPI_URL = 'https://pypi.org/simple'
 MIRROR_URL = 'https://pypi.tuna.tsinghua.edu.cn/simple'
+# torch 2.11 的 CUDA/CPU 轮子约 1~3 GB。download.pytorch.org 国内常只有几百 KB/s；
+# 南大镜像是官方索引的完整同步（同名同哈希），2026-11 实测 17 MB/s。
+TORCH_VERSION = 'torch==2.11.0'
+TORCH_INDEXES = {
+    'cu128': ('https://mirror.nju.edu.cn/pytorch/whl/cu128', 'https://download.pytorch.org/whl/cu128'),
+    'cpu': ('https://mirror.nju.edu.cn/pytorch/whl/cpu', 'https://download.pytorch.org/whl/cpu'),
+}
 
 class SingingInstallError(RuntimeError):
     pass
@@ -145,6 +152,24 @@ def _launch(argv, *, timeout, on_process=None, log_path=None, cancel_event=None)
             if on_process:on_process(None)
 
 
+def _install_torch(exe,flavor,source,*,log,cancel_event,on_process,force=False):
+    """按来源偏好在南大镜像与 PyTorch 官方之间依次尝试安装固定版本 torch。"""
+    indexes=TORCH_INDEXES[flavor]
+    if source=='official':indexes=indexes[::-1]
+    errors=[]
+    for index in indexes:
+        try:
+            _launch([exe,'-I','-m','pip','install','--disable-pip-version-check',
+                     '--timeout','30','--retries','3',
+                     *(['--force-reinstall'] if force else []),
+                     '--index-url',index,TORCH_VERSION],timeout=2400,log_path=log,
+                     cancel_event=cancel_event,on_process=on_process)
+            return
+        except SingingInstallCancelled:raise
+        except SingingInstallError as exc:errors.append(str(exc))
+    raise SingingInstallError('PyTorch 两个下载源都失败；'+errors[-1])
+
+
 def ensure_environment(python_exe,env_root,quality,*,device='cpu',source='official',
                        on_stage=None,on_process=None,cancel_event=None):
     from .singing_catalog import PROFILES
@@ -170,18 +195,12 @@ def ensure_environment(python_exe,env_root,quality,*,device='cpu',source='offici
         if on_stage:on_stage('installing_private_dependencies')
         if required=='qwen_asr' and device=='cuda' and os.name=='nt':
             if on_stage:on_stage('installing_private_torch_cuda128')
-            _launch([exe,'-I','-m','pip','install','--disable-pip-version-check',
-                     '--index-url','https://download.pytorch.org/whl/cu128',
-                     'torch==2.11.0'],timeout=1800,log_path=log,
-                     cancel_event=cancel_event,on_process=on_process)
+            _install_torch(exe,'cu128',source,log=log,cancel_event=cancel_event,on_process=on_process)
         if required=='qwen_asr' and device=='cpu' and os.name=='nt':
             # PyPI's default modern PyTorch wheel can carry CUDA runtimes even
             # for CPU-only use; install an explicit CPU build in this venv.
             if on_stage:on_stage('installing_private_torch_cpu')
-            _launch([exe,'-I','-m','pip','install','--disable-pip-version-check',
-                     '--index-url','https://download.pytorch.org/whl/cpu',
-                     'torch==2.11.0'],timeout=1800,log_path=log,
-                     cancel_event=cancel_event,on_process=on_process)
+            _install_torch(exe,'cpu',source,log=log,cancel_event=cancel_event,on_process=on_process)
         packages=(SINGING_QWEN_PACKAGES if required=='qwen_asr' else SINGING_WHISPER_PACKAGES)
         # Give the user's selected source a real meaning for Python packages.
         indexes=(MIRROR_URL,PYPI_URL) if source=='mirror' else (PYPI_URL,MIRROR_URL)
@@ -211,10 +230,8 @@ def ensure_environment(python_exe,env_root,quality,*,device='cpu',source='offici
         initial=subprocess.run(cuda_probe,env=env,capture_output=True,timeout=90)
         if initial.returncode!=0 and os.name=='nt':
             if on_stage:on_stage('repairing_private_torch_cuda128')
-            _launch([exe,'-I','-m','pip','install','--disable-pip-version-check',
-                     '--force-reinstall','--index-url',
-                     'https://download.pytorch.org/whl/cu128','torch==2.11.0'],
-                     timeout=1800,log_path=log,cancel_event=cancel_event,on_process=on_process)
+            _install_torch(exe,'cu128',source,log=log,cancel_event=cancel_event,
+                           on_process=on_process,force=True)
         gpu_check=subprocess.run(cuda_probe,env=env,capture_output=True,timeout=90)
         if gpu_check.returncode!=0:
             with log.open('ab') as f:f.write(b'\nCUDA PROBE FAILED\n'+gpu_check.stderr[-2000:]+b'\n')

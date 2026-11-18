@@ -1,11 +1,10 @@
 """Launch a bounded, read-only CUDA probe outside the N.E.K.O host process."""
 from __future__ import annotations
-
 import json
 import os
+from pathlib import Path
 import subprocess
 import sys
-from pathlib import Path
 
 
 def probe_cuda_isolated(*, python_exe, vendor, script, timeout=12):

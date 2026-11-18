@@ -6,15 +6,14 @@ thread owns the SoundCard recorder (required for CoreAudio/WASAPI lifecycles).
 """
 from __future__ import annotations
 
-import sys
-import threading
-import time
 from collections import deque
 from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
+import threading
+import time
+import sys
 from typing import Callable
-
 from .song_change import SongChangeDetector
 
 SAMPLE_RATE = 16000
@@ -416,10 +415,9 @@ class SoundCardLoopback:
                             else np.repeat(stereo[:, :1], 2, axis=1).copy())
 
     def read(self):
-        import math
-
         import numpy as np
         from scipy.signal import resample_poly
+        import math
         stereo = self._record(WINDOW_SECONDS)
         self._stereo_of(stereo)
         mono = stereo.mean(axis=1)

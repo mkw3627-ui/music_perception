@@ -13,10 +13,12 @@ This fallback runtime feature store is not claimed to be a host-managed vendor.
 """
 from __future__ import annotations
 
-import hashlib
 import importlib
+import hashlib
 import json
+from importlib import metadata
 import os
+from pathlib import Path
 import platform
 import re
 import shutil
@@ -24,12 +26,10 @@ import subprocess
 import sys
 import tempfile
 import threading
+import uuid
 import time
 import tomllib
 import urllib.request
-import uuid
-from importlib import metadata
-from pathlib import Path
 from urllib.parse import urlparse
 
 ALLOWLIST = {
@@ -67,6 +67,25 @@ def ordered_pip_sources(priority: str = 'mirror') -> tuple:
 MODEL_MAX_BYTES = 80 * 1024 * 1024
 MODEL_MIN_BYTES = 1_000_000
 READY_RUNTIME_MARKER = ".neko-audio-runtime-ready.json"
+
+# 零环境兜底：python-build-standalone 便携版（与 uv 管理的 Python 同源）。
+# 版本号与 SHA-256 取自 20261110 发行版的 SHA256SUMS；南大镜像 2026-11 实测
+# 国内 30MB/s+，GitHub 官方作为第二来源。
+PORTABLE_PYTHON_RELEASE = '20261110'
+PORTABLE_PYTHON = {
+    '3.11': ('cpython-3.11.18+20261110-x86_64-pc-windows-msvc-install_only.tar.gz',
+             '5ca7e23bbcc8933a75f4ae9c3a5e5d1ffae5fd143aec9a9d77cf5124cc6e0eef'),
+    '3.12': ('cpython-3.12.16+20261110-x86_64-pc-windows-msvc-install_only.tar.gz',
+             'e23fe5b16926de1d81661b1a97352e89fb167549c55a6825796ccd0f32ec7f1b'),
+    '3.13': ('cpython-3.13.18+20261110-x86_64-pc-windows-msvc-install_only.tar.gz',
+             '7e93813bd362c6413f30788b248590e2f169df2d17dcac81aafbcc7a6eeb542c'),
+}
+PORTABLE_PYTHON_MIRROR = 'https://mirror.nju.edu.cn/github-release/astral-sh/python-build-standalone'
+PORTABLE_PYTHON_SOURCES = (
+    ('南京大学镜像', PORTABLE_PYTHON_MIRROR + '/' + PORTABLE_PYTHON_RELEASE),
+    ('GitHub 官方', 'https://github.com/astral-sh/python-build-standalone/releases/download/'
+                    + PORTABLE_PYTHON_RELEASE),
+)
 
 # 内置的可信包源：国内优先、官方兜底。刻意不读用户机器的 PIP_INDEX/UV_INDEX
 # （见 _attempt_install 里的环境变量剥离），来源必须固定，防"源注入"。
@@ -308,9 +327,9 @@ class PythonResolver:
 
         uv = shutil.which('uv')
         if not uv:
-            raise PythonResolutionError(
-                'N.E.K.O 当前运行的是编译程序，未找到可用的独立 CPython，也没有检测到 uv；'
-                '请先在 N.E.K.O 构建环境准备 uv，插件不会尝试把 projectneko_server.exe 当 Python。')
+            # 零环境（Steam 版用户常见）：没有系统 Python 也没有 uv。
+            # 直接下载固定版本、固定 SHA-256 的便携 CPython 到插件私有目录。
+            return self._portable_python()
         existing = self._uv_find(uv)
         if existing:
             return existing
@@ -320,10 +339,17 @@ class PythonResolver:
         if existing:
             return existing
         self.notify('python-bootstrap', 0, f'正在由 uv 准备独立 CPython {self.version}（不修改系统 Python）')
+        # uv 默认从 GitHub 拉 Python，国内常超时；指向南大镜像（同一套发行包）。
         code, output = self._run([uv, 'python', 'install', '--no-bin', '--no-registry',
-                                   '--install-dir', str(own_dir), self.version], timeout=900)
+                                   '--install-dir', str(own_dir), self.version], timeout=900,
+                                 env={'UV_PYTHON_INSTALL_MIRROR': PORTABLE_PYTHON_MIRROR})
         self.notify('python-bootstrap', code, output)
         if code != 0:
+            # uv 失败时再用自带的便携版下载器试一次（带固定 SHA-256）。
+            try:
+                return self._portable_python()
+            except PythonResolutionError:
+                pass
             brief = MusicEnvironment._error_excerpt(MusicEnvironment._redact_install_output(output))
             raise PythonResolutionError('无法自动准备独立 CPython ' + self.version + '：' + brief[-600:])
         installed = self._uv_find(uv, own_dir=own_dir)
@@ -331,6 +357,68 @@ class PythonResolver:
             raise PythonResolutionError('uv 已报告 Python 安装完成，但未找到可执行的 64 位 CPython '
                                         + self.version + '；请查看诊断日志')
         return installed
+
+    def _portable_python(self) -> str:
+        """下载 python-build-standalone 便携版到 <data>/portable-python。
+
+        只接受 PORTABLE_PYTHON 里固定的版本和 SHA-256；国内镜像优先、GitHub 兜底。
+        解压前先校验摘要，解压后必须通过 _validate 的真实解释器探测。
+        """
+        import tarfile
+        target = self.directory / 'portable-python'
+        exe = target / 'python.exe'
+        if self._validate(str(exe)):
+            return str(exe.resolve())
+        pinned = PORTABLE_PYTHON.get(self.version)
+        if os.name != 'nt' or pinned is None:
+            raise PythonResolutionError(
+                f'未找到可用的独立 CPython {self.version}，也没有检测到 uv；'
+                '插件不会把 projectneko_server.exe 当 Python 使用。请安装 uv 或 Python 后重试。')
+        filename, digest = pinned
+        archive = self.directory / (filename + '.download')
+        errors: list[str] = []
+        for label, base in PORTABLE_PYTHON_SOURCES:
+            if self.cancel is not None and self.cancel.is_set():
+                raise PythonResolutionError('N.E.K.O 正在关闭，已取消 Python 环境准备')
+            url = base + '/' + filename.replace('+', '%2B')
+            self.notify('python-bootstrap', 0, f'正在下载便携 CPython {self.version}（{label}）')
+            try:
+                archive.unlink(missing_ok=True)
+                hasher = hashlib.sha256()
+                request = urllib.request.Request(url, headers={'User-Agent': 'WeiTaSuoTing-portable-python'})
+                with urllib.request.urlopen(request, timeout=30) as response, archive.open('wb') as out:
+                    if urlparse(response.geturl()).scheme != 'https':
+                        raise OSError('非 HTTPS 重定向')
+                    while True:
+                        if self.cancel is not None and self.cancel.is_set():
+                            raise PythonResolutionError('N.E.K.O 正在关闭，已取消 Python 环境准备')
+                        chunk = response.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        out.write(chunk)
+                        hasher.update(chunk)
+                if hasher.hexdigest() != digest:
+                    raise OSError('SHA-256 不匹配')
+                staging = Path(tempfile.mkdtemp(prefix='.portable-python-', dir=self.directory))
+                try:
+                    with tarfile.open(archive, 'r:gz') as tar:
+                        tar.extractall(staging, filter='data')
+                    if target.exists():
+                        shutil.rmtree(target)
+                    os.replace(staging / 'python', target)
+                finally:
+                    shutil.rmtree(staging, ignore_errors=True)
+                if not self._validate(str(exe)):
+                    raise OSError('解压后的 python.exe 未通过解释器探测')
+                self.notify('python-bootstrap', 0, f'便携 CPython {self.version} 已就绪（{label}）')
+                return str(exe.resolve())
+            except PythonResolutionError:
+                raise
+            except (OSError, tarfile.TarError, ValueError) as exc:
+                errors.append(f'{label}: {type(exc).__name__} {str(exc)[:80]}')
+            finally:
+                archive.unlink(missing_ok=True)
+        raise PythonResolutionError('便携 CPython 下载失败：' + ' / '.join(errors)[-500:])
 
 
 class MusicEnvironment:

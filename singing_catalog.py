@@ -6,12 +6,14 @@ Public checkpoints only; no copyrighted lyrics database is bundled.
 """
 from __future__ import annotations
 
+from pathlib import Path
 import hashlib
 import json
 import os
 import shutil
+import tempfile
+import time
 import threading
-from pathlib import Path
 
 PROFILES = {
     'low': {'id':'sing-whisper-small','repo':'Systran/faster-whisper-small',
@@ -47,6 +49,19 @@ PINNED_REVISION = {
  'medium':'9ba1d4a347453a45ef3fa6baabe6a1a5a132397e',
  'high':'edaa852ec7e145841d8ffdb056a99866b5f0a478',
  'ultra':'e91b24b78a0456a6b0e8d41c964277829fab1c43',
+}
+# 魔搭（ModelScope）上同名仓库的权重 SHA-256 与 PINNED_WEIGHT_HASHES 完全一致
+# （2026-11 用魔搭文件 API 逐个核对）。国内实测 10 MB/s 以上，镜像优先时排第一。
+MODELSCOPE = 'https://www.modelscope.cn'
+MODELSCOPE_FILES = {
+ 'low': ('config.json','tokenizer.json','vocabulary.txt','model.bin'),
+ 'medium': ('chat_template.json','config.json','generation_config.json','merges.txt',
+            'preprocessor_config.json','tokenizer_config.json','vocab.json','model.safetensors'),
+ 'high': ('config.json','preprocessor_config.json','tokenizer.json','vocabulary.json','model.bin'),
+ 'ultra': ('chat_template.json','config.json','generation_config.json','merges.txt',
+           'preprocessor_config.json','tokenizer_config.json','vocab.json',
+           'model.safetensors.index.json','model-00001-of-00002.safetensors',
+           'model-00002-of-00002.safetensors'),
 }
 MANIFEST_NAME = '.neko_singing_sha256.json'
 ACCEPTED_EXT = {'.json','.txt','.model','.tiktoken','.safetensors','.bin'}
@@ -174,6 +189,40 @@ def _create_verified_manifest(folder: Path, spec: dict, revision: str, lfs_shas:
         staged.unlink(missing_ok=True)
 
 
+def _download_modelscope(stage: Path, quality: str, *, lfs: dict, on_bytes=None):
+    """逐个文件从魔搭直链下载到 stage；权重用固定 SHA 校验，支持断点续传。"""
+    try:
+        from .lyrics_model_store import _stream_to_file
+    except ImportError:
+        from lyrics_model_store import _stream_to_file
+    from urllib.parse import quote
+    spec=PROFILES[quality]
+    stage.mkdir(parents=True,exist_ok=True)
+    done=0
+    for name in MODELSCOPE_FILES[quality]:
+        _validate_rel(name)
+        target=stage/name
+        url=MODELSCOPE+'/models/'+spec['repo']+'/resolve/master/'+quote(name,safe='')
+        pinned=lfs.get(name)
+        if pinned and target.is_file() and _digest(target)==pinned:
+            done+=target.stat().st_size
+            continue
+        base=done
+        def progress(received,_total,_fresh,base=base):
+            if on_bytes:on_bytes(base+int(received))
+        if pinned:
+            _stream_to_file(url,target,min_bytes=1_000_000,max_bytes=6_000_000_000,
+                            expected_sha256=pinned,transfer_progress=progress)
+        else:
+            _stream_to_file(url,target,min_bytes=2,max_bytes=20_000_000)
+            head=target.read_bytes()[:256].lstrip().lower()
+            if head.startswith((b'<html',b'<!doctype',b'{"code"',b'{"error"')):
+                target.unlink(missing_ok=True)
+                raise SingingModelError('魔搭返回了错误页而不是模型文件：'+name)
+        done+=target.stat().st_size
+    return done
+
+
 def acquire_model(root: Path, quality: str, *, source='official', on_stage=None, on_progress=None):
     """Install only after user consent; HTTPS Hub snapshot pinned to a commit.
 
@@ -188,13 +237,17 @@ def acquire_model(root: Path, quality: str, *, source='official', on_stage=None,
     from huggingface_hub import HfApi, snapshot_download
     root=Path(root);root.mkdir(parents=True,exist_ok=True)
     spec=PROFILES[quality]
-    endpoints= ('https://hf-mirror.com','https://huggingface.co') if source=='mirror' else ('https://huggingface.co','https://hf-mirror.com')
+    endpoints= ((MODELSCOPE,'https://hf-mirror.com','https://huggingface.co') if source=='mirror'
+                else ('https://huggingface.co','https://hf-mirror.com',MODELSCOPE))
     # The upstream model card / revision / LFS SHA comes from the official
     # endpoint. Mirrors may only supply bytes validated against these hashes.
     revision=PINNED_REVISION[quality]
     lfs=dict(PINNED_WEIGHT_HASHES[quality])
     if on_stage:on_stage('verifying_upstream_manifest')
     try:
+        if source=='mirror':
+            # 国内直连 huggingface.co 的 API 常卡到超时；镜像优先时只用固定 SHA。
+            raise TimeoutError('skip official metadata in mirror mode')
         official=HfApi(endpoint='https://huggingface.co').model_info(
             spec['repo'],revision=revision,files_metadata=True)
         if getattr(official,'sha',None)!=revision:
@@ -230,15 +283,20 @@ def acquire_model(root: Path, quality: str, *, source='official', on_stage=None,
                     count=snapshot_bytes(stage)
                     stats=meter.update(count,expected,estimated=True)
                     if on_progress:
-                        on_progress('downloading',dict(stats,source_name=('国内镜像' if 'mirror' in endpoint else 'Hugging Face 官方')))
+                        on_progress('downloading',dict(stats,source_name=(
+                            '魔搭 ModelScope' if endpoint==MODELSCOPE else
+                            '国内镜像' if 'mirror' in endpoint else 'Hugging Face 官方')))
                     monitor_stop.wait(1.5)
             monitor=threading.Thread(target=poll_progress,name='neko-sing-transfer-meter',daemon=True)
             monitor.start()
             try:
-                snapshot_download(repo_id=spec['repo'],revision=revision,
-                    endpoint=endpoint,local_dir=str(stage),
-                    allow_patterns=['*.json','*.txt','*.model','*.tiktoken','*.safetensors','model.bin'],
-                    local_files_only=False)
+                if endpoint==MODELSCOPE:
+                    _download_modelscope(stage,quality,lfs=lfs)
+                else:
+                    snapshot_download(repo_id=spec['repo'],revision=revision,
+                        endpoint=endpoint,local_dir=str(stage),
+                        allow_patterns=['*.json','*.txt','*.model','*.tiktoken','*.safetensors','model.bin'],
+                        local_files_only=False)
             finally:
                 monitor_stop.set()
                 monitor.join(timeout=3)
@@ -247,6 +305,9 @@ def acquire_model(root: Path, quality: str, *, source='official', on_stage=None,
                       'total_bytes':expected,'progress_pct':99,'progress_estimated':True,
                       'speed_bytes_s':None,'eta_seconds':None})
             if on_stage:on_stage('sha256_verification')
+            # 前一个来源（如魔搭）中断留下的断点文件，换源成功后不再需要。
+            for leftover in list(stage.glob('*.partial'))+list(stage.glob('*.restart')):
+                leftover.unlink(missing_ok=True)
             # snapshot_download also leaves .cache/ which is excluded from the
             # manifest and never copied to an executable location.
             _create_verified_manifest(stage,spec,revision,lfs_shas=lfs)

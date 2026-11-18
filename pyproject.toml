@@ -1,6 +1,6 @@
 [project]
 name = "neko-plugin-music-perception"
-version = "0.9.21"
+version = "0.9.22"
 description = "Application-driven dual ASR with unified model download progress, private CUDA and adaptive VRAM"
 requires-python = ">=3.11,<3.14"
 dependencies = []

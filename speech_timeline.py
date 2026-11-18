@@ -4,7 +4,6 @@ Source ASR timestamps remain unchanged. Musical beats are descriptive
 alignment, never a forced quantization of spoken/sung syllables.
 """
 from __future__ import annotations
-
 import bisect
 import math
 

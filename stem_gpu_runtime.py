@@ -6,8 +6,11 @@ SHA-256 is pinned is accepted. A failed download never activates an overlay.
 """
 from __future__ import annotations
 
+import hashlib
+from html.parser import HTMLParser
 import json
 import os
+from pathlib import Path
 import shutil
 import sys
 import time
@@ -15,8 +18,6 @@ import urllib.parse
 import urllib.request
 import uuid
 import zipfile
-from html.parser import HTMLParser
-from pathlib import Path
 
 GPU_PACKAGE_VERSION = '1.26.0'  # pinned CUDA 12.8/cuDNN 9 GPU binary
 GPU_WHEEL = 'onnxruntime_gpu-1.26.0-cp311-cp311-win_amd64.whl'
@@ -55,9 +56,9 @@ def overlay_path(environment_dir):
 
 def inventory(environment_dir):
     try:
-        from .stem_cuda_bundle import CUDA_ESTIMATED_DOWNLOAD_BYTES, cuda_runtime_path, runtime_inventory
+        from .stem_cuda_bundle import cuda_runtime_path, runtime_inventory, CUDA_ESTIMATED_DOWNLOAD_BYTES
     except ImportError:
-        from stem_cuda_bundle import CUDA_ESTIMATED_DOWNLOAD_BYTES, cuda_runtime_path, runtime_inventory
+        from stem_cuda_bundle import cuda_runtime_path, runtime_inventory, CUDA_ESTIMATED_DOWNLOAD_BYTES
     installed = overlay_path(environment_dir)
     cuda = cuda_runtime_path(environment_dir)
     return {'installed': installed is not None and cuda is not None,
@@ -199,9 +200,9 @@ def install_gpu(environment_dir, status_path, priority='mirror'):
     wheel.parent.mkdir(parents=True,exist_ok=True)
     errors=[]
     try:
-        from .lyrics_model_store import _file_sha256, _stream_to_file
+        from .lyrics_model_store import _stream_to_file, _file_sha256
     except ImportError:  # independent -I -S installer imports by local filename
-        from lyrics_model_store import _file_sha256, _stream_to_file
+        from lyrics_model_store import _stream_to_file, _file_sha256
     try:
         from .download_telemetry import TransferMeter
     except ImportError:
