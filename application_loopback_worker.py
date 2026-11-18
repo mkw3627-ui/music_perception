@@ -37,12 +37,12 @@ def _stream(tap, source, token, *, stereo: bool):
     import numpy as np
     from scipy.signal import resample_poly
 
+    pending = bytearray()
+    # 同目录模块（本进程以脚本方式启动，靠 sys.path 找到）；
+    # loopback_worker 提供 25ms 起音包络，动作延迟靠它降到 0.1 秒级
     import app_channels
-
-    # 同目录的 loopback_worker 提供 25ms 起音包络；动作延迟靠它降到 0.1 秒级
     from loopback_worker import _OnsetTracker
 
-    pending = bytearray()
     onset = _OnsetTracker(48000)
     framesize = 2 * 4   # 48kHz stereo interleaved float32 (ProcTap API)
     needed = WINDOW_FRAMES * framesize
