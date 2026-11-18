@@ -28,7 +28,21 @@ class Ok:
         self.value = value
 
 
-if "plugin.sdk.plugin" not in sys.modules:
+def _real_sdk_available() -> bool:
+    """在 N.E.K.O 仓库里跑（插件市场 CI 的 check --release）时用真的 SDK。
+
+    只有单独克隆插件仓库、没有宿主时才装下面的替身；否则替身会把真的
+    `plugin` 包整个盖掉，pytest 就找不到 `plugin.plugins`。
+    """
+    import importlib.util
+
+    try:
+        return importlib.util.find_spec("plugin.sdk.plugin") is not None
+    except ImportError:
+        return False
+
+
+if "plugin.sdk.plugin" not in sys.modules and not _real_sdk_available():
     plugin = types.ModuleType("plugin")
     plugin.__path__ = []
     sdk = types.ModuleType("plugin.sdk")
