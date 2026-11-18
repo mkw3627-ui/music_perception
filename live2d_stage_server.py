@@ -195,7 +195,7 @@ class _BridgeHandler(BaseHTTPRequestHandler):
             self._send(200, json.dumps(payload, ensure_ascii=False).encode("utf-8"),
                        "application/json; charset=utf-8")
             return
-        if path in ("/music_groove.js", "/music_visemes.js", "/bridge.js"):
+        if path in ("/music_groove.js", "/music_visemes.js", "/param_adapter.js", "/live2d_adapt.js", "/bridge.js"):
             target = (self.root / path.lstrip("/")).resolve()
             try:
                 target.relative_to(self.root.resolve())

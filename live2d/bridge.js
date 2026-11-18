@@ -16,7 +16,7 @@
   'use strict';
   var BASE = 'http://127.0.0.1:48765';
   var STATIC = '/static/live2d/';
-  var VERSION = 77;
+  var VERSION = 81;
   // 一执行就上报：用来区分「页面没加载脚本」和「加载了但模块被拦」。
   try {
     fetch(BASE + '/hello?v=' + VERSION + '&stage=boot', { cache: 'no-store' }).catch(function () {});
@@ -361,6 +361,52 @@
     var m = window.live2dManager;
     return m && (m.currentModel || null);
   }
+
+  // ---- 参数适配层（param_adapter.js）----
+  // 所有表情 / 身体 / 嘴型写入都按「语义通道」走适配层：标准 ID 优先，没有就按
+  // model3.json 的分组和 cdi3 显示名去认；认不出就跳过，不按编号硬写。数值用
+  // 「参考模型单位」（头 ±30°、身体 ±10°、其他参数原值），由适配层按当前模型的
+  // 真实区间换算——标准量程模型行为不变，量程不同的模型按比例缩放。
+  var PA = null;
+  function pa() { return PA || (PA = window.NekoParamAdapter || null); }
+  var paInfo = { core: null, named: false, at: 0 };
+  function paProfile(core) {
+    var A = pa();
+    if (!A || !core) return null;
+    // 显示名（cdi3）是主程序异步加载的，可能晚于我们第一次挂上模型；没拿到名字时
+    // 每秒重试一次，拿到后重建映射（特效类通道全靠名字认）。
+    var mgr0 = window.live2dManager;
+    var namesReady = !!(mgr0 && mgr0._displayInfo && mgr0._displayInfo.Parameters);
+    var now = performance.now();
+    if (paInfo.core === core && !paInfo.named && namesReady && now - paInfo.at > 1000) paInfo.core = null;
+    if (paInfo.core !== core) {
+      paInfo.core = core;
+      paInfo.named = namesReady;
+      paInfo.at = now;
+      var mgr = window.live2dManager, info = { name: '' };
+      try {
+        info.displayInfo = mgr && mgr._displayInfo || null;
+        var fr = mgr && mgr.fileReferences;
+        var st = null;
+        try { st = hookedModel && hookedModel.internalModel && hookedModel.internalModel.settings; } catch (e0) { st = null; }
+        var json = st && st.json;
+        info.settings = json ? json : (fr ? { FileReferences: fr } : null);
+        if (info.settings && fr && fr.Expressions && !(info.settings.FileReferences || {}).Expressions) {
+          info.settings.FileReferences = Object.assign({}, info.settings.FileReferences || {}, { Expressions: fr.Expressions });
+        }
+        info.name = (mgr && (mgr.modelName || mgr.modelRootPath)) || '';
+      } catch (e) { /* 拿不到就只按标准 ID 认 */ }
+      var prof = A.attachInfo(core, info);
+      try { dbg.adapter = A.describe(core); } catch (e2) { dbg.adapter = null; }
+      return prof;
+    }
+    return A.profile(core);
+  }
+  // 语义通道 → 是否存在（取代按参数名逐个探测）
+  function chHas(core, ch) { var p = paProfile(core); return !!(p && p.map[ch]); }
+  function chAdd(core, ch, v) { if (!v || !paProfile(core)) return 0; return pa().addRef(core, ch, v); }
+  function chSet(core, ch, v) { if (!paProfile(core)) return 0; return pa().setRef(core, ch, v); }
+  function chMap(core, ch) { var p = paProfile(core); return p && p.map[ch] || null; }
 
   function isActive() {
     // 能量门槛压得很低：安静的段落里也要保持「在听」，否则那一声突然的
@@ -1508,25 +1554,10 @@
     var stageOwns = false;
     try { stageOwns = !!(document.body && document.body.classList.contains('neko-solo-stage')); } catch (e) { stageOwns = false; }
     if (stageOwns) return;
-    for (var i = 0; i < 2; i++) {
-      var id = i ? 'ParamEyeBallY' : 'ParamEyeBallX';
-      try {
-        var idx = core.getParameterIndex(id);
-        if (idx < 0) continue;
-        var lo = Number(core.getParameterMinimumValue(idx));
-        var hi = Number(core.getParameterMaximumValue(idx));
-        if (!isFinite(lo) || !isFinite(hi) || hi <= lo) continue;
-        if (Math.max(Math.abs(lo), Math.abs(hi)) > 2) continue;   // 按度写的模型不管
-        var dv = 0;
-        try {
-          if (typeof core.getParameterDefaultValue === 'function') {
-            var d = Number(core.getParameterDefaultValue(idx));
-            if (isFinite(d)) dv = d;
-          }
-        } catch (e1) { dv = 0; }
-        core.setParameterValueById(id, dv);
-      } catch (e2) { /* 没有这个参数 */ }
-    }
+    // 按语义通道写回模型默认值；量程 ±30 的眼球（按度写的模型）同样适用。
+    if (!paProfile(core)) return;
+    pa().reset(core, 'eyeBallX');
+    pa().reset(core, 'eyeBallY');
   }
   function ensureGazeHook() {
     var mgr = eyeManager();
@@ -1650,31 +1681,27 @@
     var f = sf ? sf.f : (lips.active ? ZERO_FACE : emo.f), w = 0, g = gestSt.out;
     // 唱歌态：细节表情层（乐句弧/咬字/颤音/特效）仍用 0，只留动作层 g。
     var ex = lips.active ? ZERO_EXTRA : extra;
-    var has = emoSupport(core);
+    emoSupport(core);
     // 叠加：眉毛/笑眼/脸颊/嘴形主程序不强制占着，叠一层不会打架。
-    function add(id, v) {
-      if (!v || !has[id]) return;
-      try { core.addParameterValueById(id, v); w += 1; } catch (e) { /* 不认这个 ID */ }
+    // ch 是语义通道，v 是参考模型单位（见 paProfile 的说明）。
+    function add(ch, v) {
+      if (!v) return;
+      w += chAdd(core, ch, v);
+    }
+    // 特效类通道：v 是 0..1 的「强度」，直接按模型自己的满量程展开。
+    function fx(ch, v) {
+      if (!v || !chHas(core, ch)) return;
+      w += pa().add(core, ch, v);
     }
     // 读现值→加偏移→钳到模型区间→写回。眼开合/视线/头角度被主程序、物理和
     // 律动同时写，只有「基于当前值」才不会每帧累积把模型甩出去。
-    function rel(id, dv) {
-      if (!dv || !has[id]) return;
+    function rel(ch, dv) {
+      if (!dv) return;
       // g77：「当前值 + 偏移」只能在模型 update 周期里写（帧末 loadParameters 会还原）；
       // rAF 兜底路径（渲染停着时）写进去不会被还原，逐帧累加会把头推到 ±30 卡死。
-      if (!faceInEvent && /^ParamAngle/.test(id)) return;
-      try {
-        var idx = core.getParameterIndex(id);
-        var cur = Number(core.getParameterValueById(id)) || 0;
-        var lo = Number(core.getParameterMinimumValue(idx));
-        var hi = Number(core.getParameterMaximumValue(idx));
-        if (!isFinite(lo) || !isFinite(hi) || hi <= lo) { lo = -1e3; hi = 1e3; }
-        var nv = cur + dv;
-        if (nv < lo) nv = lo;
-        if (nv > hi) nv = hi;
-        core.setParameterValueById(id, nv);
-        w += 1;
-      } catch (e) { /* 模型没有这个参数 */ }
+      if (!faceInEvent && /^head/.test(ch)) return;
+      // 适配层的叠加写就是「读现值 + 偏移 + 钳到模型区间」。
+      w += chAdd(core, ch, dv);
     }
     // 眉和嘴形：本帧的情绪值 + 动作层的偏移。动作层的量在 gestTick 里按
     // 关键帧算好，这里只乘 gain，不单独改语义。
@@ -1684,13 +1711,13 @@
     // g62：左右眉差一点。两边永远一模一样才是「像面具」的主因；一侧略高
     // （跟着头转向 + 咬字那一下）就会读成「挑眉 / 疑惑 / 俏皮」。
     var asym = ex.asym + ex.browSyl * 0.55;
-    add('ParamBrowLY', browIn + ex.browSyl + asym);
-    add('ParamBrowRY', browIn + ex.browSyl * 0.6 - asym * 0.35);
-    add('ParamBrowLAngle', browOut);
-    add('ParamBrowRAngle', browOut);
+    add('browLY', browIn + ex.browSyl + asym);
+    add('browRY', browIn + ex.browSyl * 0.6 - asym * 0.35);
+    add('browLAngle', browOut);
+    add('browRAngle', browOut);
     // 压眉：SDK 标准表里 browDown 的 scale 是 -0.85（负号 = 往下压）。
-    add('ParamBrowLForm', -browDn * 0.85);
-    add('ParamBrowRForm', -browDn * 0.85);
+    add('browLForm', -browDn * 0.85);
+    add('browRForm', -browDn * 0.85);
     // g60：眼形（ParamEyeLSmile / ParamEyeRSmile）**一律不再写**。
     // 实测这个模型（Blue cat）的 EyeSmile 会把下眼睑往下拉：眼白变大、虹膜
     // 显小（用户报的「眼珠子非常小」）。而且 addParameterValueById 是叠加写，
@@ -1698,32 +1725,36 @@
     // （/hello?ed= 实测：没在唱时 EyeLSmile 还是 0.13、face_writes=0）。
     // 眼睛形状归主程序和模型本体，这一层不再碰。
     // 脸颊：g62 起乘乐句弧（同一句里越到最后越红一点），上限 0.9×0.85。
-    add('ParamCheek', f.cheek * 0.9 * (0.76 + 0.30 * ex.arc));
-    add('ParamMouthForm', f.mouth + g.mouth * GEST.mouth);
+    add('cheek', f.cheek * 0.9 * (0.76 + 0.30 * ex.arc));
+    add('mouthForm', f.mouth + g.mouth * GEST.mouth);
     // ---- g62：第二套表情通道 ----
     // 嘴角（笑/撇嘴）：主程序和口型轨都不写 ParamMouthForm2，所以这条不会被
     // 口型绝对写压掉，是「看得出在笑」的那一条。
-    add('ParamMouthForm2', ex.smile2);
+    // 参考模型（Blue cat）上这几条的量程是 ±30 / 0..1；换成「占满量程的比例」写，
+    // 别的模型有同名效果就按它自己的量程展开，没有就跳过。
+    fx('smile2', ex.smile2 / 30);
     // 嘴的左右位移：跟着头转。
-    add('ParamMouthForm3', ex.mouthX);
+    fx('mouthX', ex.mouthX / 30);
     // 露牙：只在嘴真的张开时（extraTick 里的 teethGate 已经把闭口压成 0）。
-    add('ParamMouthOpenY23', ex.teeth);
+    fx('teeth', ex.teeth);
     // g63：Param202「变小」不写（见上面 EMO 通道表的说明）。
     // 生气符号特效：只有 anger 原型 + 情绪够重才长，0.55s 长出来，不会突然跳出。
-    add('Param54', ex.mk);
+    fx('angerMark', ex.mk / 30);
     // ---- g64：贴图特效（大幅度的「看得见」） ----
     // 这四个都是这个模型自带的画师参数，满量程时一眼就能认出来；形变类参数
     // （眉/嘴角/脸颊）在整身视角下只有几个像素，靠它们撑不起「大表情」。
     // 全部由 act 门控：间奏/停歌时 f.* 归零，extraTick 再把实际写入量收干，
     // 平滑收尾 0.7~0.9s，不会留在脸上。
     // Param57 脸红（0..30）：写 22 就是很红，再高会糊成一块。
-    add('Param57', ex.blush * 22);
+    // 脸红贴图：参考模型满量程 30，写 22 ≈ 73%。没有专门贴图的模型落到 ParamCheek 上。
+    if (chHas(core, 'blushFx')) fx('blushFx', ex.blush * 22 / 30);
+    else fx('cheek', ex.blush * 0.5);
     // Param64 流泪（0..1）：模型自带的两行泪。
-    add('Param64', ex.tears);
-    // Param58 花花（0..1）：头发上那朵花变红，只有「高兴+激动」才开。
-    add('Param58', ex.flower);
+    fx('tears', ex.tears);
+    // 「花花」（头发上的花变红）：只认显示名正好叫「花花」的参数；别的模型同编号是别的东西。
+    fx('flower', ex.flower);
     // Param56 脸黑（0..30）：anger 专用，和生气符号（Param54）配套。
-    add('Param56', ex.darkFace * 16);
+    fx('darkFace', ex.darkFace * 16 / 30);
     // 眼开合（ParamEyeLOpen/ROpen）这里**不写**。主程序在 coreModel.update 的
     // 拦截器里（libs/index.min.js：emit("beforeModelUpdate") → n.update()）用
     // _updateEyeBlink 每帧写绝对值，那个时机在我们之后；而它又会因为
@@ -1737,9 +1768,9 @@
     // 直接加在 EMO.maxHead 那一项之外，幅度才够看见）。
     // g69：桌面档下情绪偏移是次要层（× kS，主动作在播时压到 30%），再加逐句视线
     var ks = desk.on ? desk.kS : 1;
-    rel('ParamAngleX', f.headX * EMO.maxHead * ks + g.headX * GEST.head + desk.gx);
-    rel('ParamAngleY', f.headY * EMO.maxHead * ks + g.headY * GEST.head + desk.gy);
-    rel('ParamAngleZ', f.headZ * EMO.maxHead * ks + g.headZ * GEST.head);
+    rel('headX', f.headX * EMO.maxHead * ks + g.headX * GEST.head + desk.gx);
+    rel('headY', f.headY * EMO.maxHead * ks + g.headY * GEST.head + desk.gy);
+    rel('headZ', f.headZ * EMO.maxHead * ks + g.headZ * GEST.head);
     if (w) emo.writes += 1;
     return w;
   }
@@ -1792,7 +1823,7 @@
     var now = performance.now();
     var dt = bodySt.t ? clamp((now - bodySt.t) / 1000, 0.002, 0.10) : 0.016;
     bodySt.t = now;
-    var has = bodySupport(core);
+    bodySupport(core);
 
     var v = emo.v, a = emo.a, d = emo.d;
     var ar = Math.max(0, a), sub = Math.max(0, -d);
@@ -1836,18 +1867,19 @@
 
     var n = 0;
     var ks = desk.on ? desk.kS : 1;   // g69：身体慢摆/情绪倾角是次要层
-    function put(id, val) {
-      if (!has[id] || !isFinite(val) || Math.abs(val) < 0.004) return;
-      // addParameterValueById 自己会按模型区间钳位，不会把参数甩出去。
-      try { core.addParameterValueById(id, val); n += 1; } catch (e) { /* 没有这个参数 */ }
+    function put(ch, val) {
+      if (!isFinite(val) || Math.abs(val) < 0.004) return;
+      // 适配层按模型区间换算并钳位，不会把参数甩出去。
+      n += chAdd(core, ch, val);
     }
-    put('ParamBodyAngleX', bodySt.x * ks + gestSt.out.bodyX * GEST.body);
-    put('ParamBodyAngleY', bodySt.y * ks + gestSt.out.bodyY * GEST.body);
-    put('ParamBodyAngleZ', bodySt.z * ks + gestSt.out.bodyZ * GEST.body);
-    put('ParamBreath', bodySt.br);
-    put('ParamHairFront', hf);
-    put('ParamHairSide', hsd);
-    put('ParamHairBack', hb);
+    put('bodyX', bodySt.x * ks + gestSt.out.bodyX * GEST.body);
+    put('bodyY', bodySt.y * ks + gestSt.out.bodyY * GEST.body);
+    put('bodyZ', bodySt.z * ks + gestSt.out.bodyZ * GEST.body);
+    put('breath', bodySt.br);
+    // 头发：没有专门摇摆参数的模型（大多数），物理会跟着身体自己动，这里跳过即可。
+    put('hairFront', hf);
+    put('hairSide', hsd);
+    put('hairBack', hb);
     bodySt.w = n;
     bodySt.on = n > 0 ? 1 : 0;
     return n;
@@ -1877,27 +1909,16 @@
     // g75：舞台接管时（body 带 neko-solo-stage）眼球归舞台写，这里不回默认值；
     // 否则舞台写的视线每帧被拉回正中，眼珠永远不左右上下看。退出舞台自动恢复。
     try { if (document.body && document.body.classList.contains('neko-solo-stage')) return 0; } catch (eS) { }
+    if (!paProfile(core)) return 0;
+    var chs = ['eyeBallX', 'eyeBallY'];
     for (var i = 0; i < 2; i++) {
-      var id = i ? 'ParamEyeBallY' : 'ParamEyeBallX';
-      try {
-        var idx = core.getParameterIndex(id);
-        if (idx < 0) continue;
-        var lo = Number(core.getParameterMinimumValue(idx));
-        var hi = Number(core.getParameterMaximumValue(idx));
-        if (!isFinite(lo) || !isFinite(hi) || hi <= lo) continue;
-        if (Math.max(Math.abs(lo), Math.abs(hi)) > 2) continue;   // 按度写的模型不管
-        var dv = 0;
-        try {
-          if (typeof core.getParameterDefaultValue === 'function') {
-            var d = Number(core.getParameterDefaultValue(idx));
-            if (isFinite(d)) dv = d;
-          }
-        } catch (e1) { dv = 0; }
-        var cur = Number(core.getParameterValueById(id));
-        if (!isFinite(cur) || Math.abs(cur - dv) < 0.0005) continue;
-        core.setParameterValueById(id, dv);
-        n += 1;
-      } catch (e) { /* 没有这个参数 */ }
+      var m = chMap(core, chs[i]);
+      if (!m) continue;
+      var cur = NaN;
+      try { cur = Number(core.getParameterValueById(m.id)); } catch (e) { cur = NaN; }
+      // 允许误差按量程算：±30 的眼球 0.0005 太严，会每帧都写
+      if (!isFinite(cur) || Math.abs(cur - m.def) < 0.0005 * Math.max(1, m.hi - m.lo)) continue;
+      n += pa().reset(core, chs[i]);
     }
     return n;
   }
@@ -3064,19 +3085,16 @@
   // 停手后旧值会留在参数里（历史上 EyeSmile 残留、MouthForm=0.75 都是这么来的）。
   // 这里在「进唱歌」和「出唱歌」两个边沿把本层写过的参数显式写回默认 0，
   // 并把平滑状态清零；不碰眼睑开合（归主程序 blink 器）与身体/动作层。
-  var FACE_RESET_IDS = [
-    'ParamBrowLY', 'ParamBrowRY', 'ParamBrowLAngle', 'ParamBrowRAngle',
-    'ParamBrowLForm', 'ParamBrowRForm', 'ParamCheek',
-    'ParamMouthForm', 'ParamMouthForm2', 'ParamMouthForm3',
-    'ParamMouthOpenY', 'ParamMouthOpenY23',
-    'ParamEyeLSmile', 'ParamEyeRSmile',
-    'Param54', 'Param56', 'Param57', 'Param58', 'Param64'
+  // 复位按语义通道走：写回模型自己的默认值（不是 0——有的模型默认不在 0），
+  // 也不会把同编号、别的含义的参数（另一个模型的 Param57 等）误写成 0。
+  var FACE_RESET_CHANNELS = [
+    'browLY', 'browRY', 'browLAngle', 'browRAngle', 'browLForm', 'browRForm', 'cheek',
+    'mouthForm', 'smile2', 'mouthX', 'mouthOpen', 'teeth', 'eyeLSmile', 'eyeRSmile',
+    'angerMark', 'darkFace', 'blushFx', 'tears', 'flower'
   ];
   function faceResetToDefault(core) {
-    if (core) {
-      for (var i = 0; i < FACE_RESET_IDS.length; i++) {
-        try { core.setParameterValueById(FACE_RESET_IDS[i], 0); } catch (e) { /* 模型没有这个参数 */ }
-      }
+    if (core && paProfile(core)) {
+      for (var i = 0; i < FACE_RESET_CHANNELS.length; i++) pa().reset(core, FACE_RESET_CHANNELS[i]);
     }
     face.brow = face.smile = face.cheek = face.angle = 0;
     extra.smile2 = extra.mouthX = extra.teeth = extra.mk = 0;
@@ -3344,21 +3362,19 @@
         else lips.writes = (lips.writes || 0) + 1;
       } catch (e2) { lipsRelease(); }
     } else if (core) {
-      try { core.setParameterValueById('ParamMouthOpenY', shown); } catch (e3) { /* 无此参数 */ }
+      // 没有主程序口型通道时自己写：嘴的开合通道（ParamMouthOpenY / LipSync 组 / ParamA）。
+      if (paProfile(core)) pa().set(core, 'mouthOpen', shown);
     }
 
     // 嘴形（圆/扁）单独写：主程序只强制开合，不管 ParamMouthForm。
     if (core) {
       try {
-        var fb = formBounds(core);
-        if (fb.idx >= 0) {
-          // 模型的 ParamMouthForm 区间不一定是 -1..1（有的模型是 0..1），
-          // 先问 core 要真实上下限再展开，免得噘嘴全被钳成同一个值。
-          // 写平滑后的值：每 0.2 秒跳一次的嘴形同样显得「一个一个字地嚼」。
-          var unit = clamp(lips.lastForm || 0, -1, 1);
-          var value = fb.lo + (unit + 1) * 0.5 * (fb.hi - fb.lo);
-          core.setParameterValueById('ParamMouthForm', value);
-        }
+        // 嘴形区间不一定是 -1..1（有的模型 0..1、有的 ±0.8），适配层按真实区间展开，
+        // 免得噘嘴全被钳成同一个值。写平滑后的值：每 0.2 秒跳一次的嘴形同样显得
+        // 「一个一个字地嚼」。没有嘴形参数、只有嘴角上扬（mao_pro）的模型写到那条上。
+        var unit = clamp(lips.lastForm || 0, -1, 1);
+        if (chHas(core, 'mouthForm')) pa().set(core, 'mouthForm', unit);
+        else if (chHas(core, 'smile2')) pa().set(core, 'smile2', Math.max(0, unit) * 0.6);
       } catch (e4) { /* 模型没有嘴形参数 */ }
     }
   }
@@ -3457,11 +3473,11 @@
     // 叠加后的最终值，再决定要不要压回边界。
     var gazeWrote = applyGazeLimit(core);
     if (!b && !s && !c && !ck && !a && !emoWrote && !bodyWrote && !gazeWrote) return;
-    var has = faceSupport(core);
+    faceSupport(core);
     var wrote = 0;
-    function add(id, value) {
-      if (!value || !has[id]) return;
-      try { core.addParameterValueById(id, value); wrote += 1; } catch (e) { /* 不认这个 ID */ }
+    function add(ch, value) {
+      if (!value) return;
+      wrote += chAdd(core, ch, value);
     }
     // 笑眼是唯一被两条通道同时加的参数：乐句通道（face.smile，上限 0.90）和
     // 情绪层（f.eyeSmile，上限 0.45）。两边各自看都合理，加起来能顶到参数
@@ -3483,13 +3499,13 @@
         wrote += 1;
       } catch (e) { /* 模型没有这个参数 */ }
     }
-    add('ParamBrowLY', b);
-    add('ParamBrowRY', b);
-    add('ParamBrowLAngle', a);
-    add('ParamBrowRAngle', a);
+    add('browLY', b);
+    add('browRY', b);
+    add('browLAngle', a);
+    add('browRAngle', a);
     // g60：笑眼不再写（见 applyEmo 里的说明）。乐句通道的 s 仍然算，用来
     // 判断这一帧要不要往下走，但不再落到 ParamEyeLSmile/EyeRSmile 上。
-    add('ParamCheek', c + ck);
+    add('cheek', c + ck);
     if (wrote || emoWrote || bodyWrote || gazeWrote) {
       faceStats.writes += 1;
       faceStats.last = b.toFixed(2) + ',' + s.toFixed(2) + ','
@@ -3498,23 +3514,6 @@
                      + '|x' + extra.smile2.toFixed(1)
                      + ',' + extra.mk.toFixed(1) + ',' + extra.teeth.toFixed(2);
     }
-  }
-
-  // ParamMouthForm 的真实区间（按模型缓存一次）
-  var formCache = { core: null, idx: -1, lo: -1, hi: 1 };
-  function formBounds(core) {
-    if (formCache.core === core) return formCache;
-    var idx = -1, lo = -1, hi = 1;
-    try { idx = core.getParameterIndex ? core.getParameterIndex('ParamMouthForm') : -1; } catch (e) {}
-    if (idx >= 0) {
-      try { lo = Number(core.getParameterMinimumValue(idx)); } catch (e) {}
-      try { hi = Number(core.getParameterMaximumValue(idx)); } catch (e) {}
-      if (!isFinite(lo)) lo = -1;
-      if (!isFinite(hi)) hi = 1;
-      if (hi <= lo) { lo = -1; hi = 1; }
-    }
-    formCache = { core: core, idx: idx, lo: lo, hi: hi };
-    return formCache;
   }
 
   var frameSeq = 0;      // tick 每帧 +1
@@ -3571,6 +3570,7 @@
     if (first) appliedSeq = frameSeq;
     var useBlend = typeof forceBlend === 'number' ? forceBlend
       : (first ? blend : 1);
+    paProfile(core);
     window.MusicGroove.applyToModel(core, engine.frame,
       // g69：桌面档下律动是最低一档，× 逐句幅度 × 仲裁（主动作在播时 30%）
       { gain: desk.on ? desk.gGain : 1, breathBase: 0.45, blend: useBlend });
@@ -3587,15 +3587,16 @@
     var im = hookedModel && hookedModel.internalModel;
     var core = im && im.coreModel;
     if (!core || !grooveActive()) return;
+    var mx = chMap(core, 'eyeBallX'), my = chMap(core, 'eyeBallY');
     var ex = null, ey = null;
-    try { ex = core.getParameterValueById('ParamEyeBallX'); } catch (e) { ex = null; }
-    try { ey = core.getParameterValueById('ParamEyeBallY'); } catch (e2) { ey = null; }
+    try { ex = mx ? core.getParameterValueById(mx.id) : null; } catch (e) { ex = null; }
+    try { ey = my ? core.getParameterValueById(my.id) : null; } catch (e2) { ey = null; }
     if (!grooveApply(core)) return;
     try {
-      if (typeof ex === 'number' && isFinite(ex)) core.setParameterValueById('ParamEyeBallX', ex);
+      if (mx && typeof ex === 'number' && isFinite(ex)) core.setParameterValueById(mx.id, ex);
     } catch (e3) { /* 没有这个参数 */ }
     try {
-      if (typeof ey === 'number' && isFinite(ey)) core.setParameterValueById('ParamEyeBallY', ey);
+      if (my && typeof ey === 'number' && isFinite(ey)) core.setParameterValueById(my.id, ey);
     } catch (e4) { /* 没有这个参数 */ }
   }
 
@@ -3617,6 +3618,16 @@
   function hook(model) {
     if (!model || !model.internalModel || model === hookedModel) return;
     hookedModel = model;
+    // 换模型：后台量一次这个模型的真实参数幅度（NekoL2DAdapt，约几十毫秒，量完还原），
+    // 量好后适配层自动换上实测增益和替身参数；量好之前按区间换算，不阻塞第一帧。
+    try {
+      var C = window.NekoL2DAdapt;
+      if (C && typeof C.calibrate === 'function') {
+        C.calibrate(model).then(function () {
+          try { dbg.adapter = pa() ? pa().describe(model.internalModel.coreModel) : null; } catch (e1) { /* 只是诊断 */ }
+        }).catch(function () { /* 量不出就按区间换算 */ });
+      }
+    } catch (e0) { /* 没有校准器 */ }
     dbg.model = (model.internalModel.originalWidth || 0) + 'x' + (model.internalModel.originalHeight || 0);
     try {
       model.internalModel.on('afterMotionUpdate', applyNow);
@@ -3841,6 +3852,11 @@
     window.__nekoMusicVox = vox;
     window.__nekoMusicMus = mus;
     window.__nekoMusicDesk = desk;     // g69：桌面档状态（只读诊断，CDP 取）
+    // 参数适配层：当前模型每个语义通道落到了哪个参数（只读诊断，CDP 取）
+    window.__nekoMusicAdapter = function () {
+      var c = hookedModel && hookedModel.internalModel && hookedModel.internalModel.coreModel;
+      return c && pa() ? (paProfile(c), pa().describe(c)) : null;
+    };
     engine = new window.MusicGroove({ style: 'auto', intensity: 1, variation: 0.8, seed: 'neko' });
     setInterval(poll, 100);
     poll();
@@ -3895,8 +3911,17 @@
   }
 
   // 带版本号，避免主窗口复用上一轮的脚本缓存。
-  load(STATIC + 'music_groove.js?v=' + VERSION)
-    .catch(function () { return load(BASE + '/music_groove.js?v=' + VERSION); })
+  load(STATIC + 'live2d_adapt.js?v=' + VERSION)
+    .catch(function () { return load(BASE + '/live2d_adapt.js?v=' + VERSION); })
+    .catch(function () { /* 实测校准是可选的：没有它就只按区间换算 */ })
+    .then(function () {
+      return load(STATIC + 'param_adapter.js?v=' + VERSION)
+        .catch(function () { return load(BASE + '/param_adapter.js?v=' + VERSION); });
+    })
+    .then(function () {
+      return load(STATIC + 'music_groove.js?v=' + VERSION)
+        .catch(function () { return load(BASE + '/music_groove.js?v=' + VERSION); });
+    })
     .then(function () {
       return load(STATIC + 'music_visemes.js?v=' + VERSION)
         .catch(function () { return load(BASE + '/music_visemes.js?v=' + VERSION); });

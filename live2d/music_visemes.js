@@ -102,12 +102,21 @@
     var form = { A: 0.8, I: 1.0, U: 0.55, E: 0.9, O: 0.5, M: 1.0, N: 0.85, F: 0.75, L: 0.9, rest: 1.0 };
     var open = state && typeof state.open === 'number' ? state.open : 0;
     var v = (state && state.viseme) || 'rest';
+    var openV = open * (v === 'rest' ? 0.15 : 1);
+    var formV = form[v] == null ? 1 : form[v];
+    // 有参数适配层就按语义通道写（开合可能是 ParamA、嘴形区间可能是 0..1），否则按标准 ID。
+    var PA = (typeof self !== 'undefined' && self.NekoParamAdapter) || null;
+    if (PA && PA.profile(coreModel)) {
+      PA.set(coreModel, 'mouthOpen', openV);
+      PA.set(coreModel, 'mouthForm', formV);
+      return;
+    }
     try {
       if (coreModel.getParameterIndex('ParamMouthOpenY') >= 0) {
-        coreModel.setParameterValueById('ParamMouthOpenY', open * (v === 'rest' ? 0.15 : 1));
+        coreModel.setParameterValueById('ParamMouthOpenY', openV);
       }
       if (coreModel.getParameterIndex('ParamMouthForm') >= 0) {
-        coreModel.setParameterValueById('ParamMouthForm', form[v] == null ? 1 : form[v]);
+        coreModel.setParameterValueById('ParamMouthForm', formV);
       }
     } catch (e) { /* 忽略缺失参数 */ }
   }

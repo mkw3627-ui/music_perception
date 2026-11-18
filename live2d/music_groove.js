@@ -977,6 +977,18 @@
     // 所有写入都走这里。blend < 1 时从「模型当前值」过渡到目标值，
     // 而不是从 0 过渡：音乐开始/停下时，头和身体是从待机姿态平滑接过来的，
     // 不会先掉到正中再弹回待机（那正是「硬切回待机」的观感）。
+    // 参数适配层：标准 ID 在这个模型上不存在时，换成适配层认出的同义参数；
+    // 认不出就跳过。没有加载适配层时按原样写标准 ID。
+    var PA = (typeof self !== 'undefined' && self.NekoParamAdapter) || null;
+    var prof = PA ? PA.profile(coreModel) : null;
+    var STD2CH = { ParamAngleX: 'headX', ParamAngleY: 'headY', ParamAngleZ: 'headZ',
+                   ParamBodyAngleX: 'bodyX', ParamBodyAngleY: 'bodyY', ParamBodyAngleZ: 'bodyZ',
+                   ParamEyeBallX: 'eyeBallX', ParamEyeBallY: 'eyeBallY', ParamBreath: 'breath' };
+    var resolve = function (id) {
+      if (!prof) return id;
+      var m = prof.map[STD2CH[id]];
+      return m ? m.id : null;
+    };
     var write = function (id, value) {
       try {
         if (coreModel.getParameterIndex(id) < 0) return;
@@ -1035,6 +1047,8 @@
     // 而身体 ±10° 写 5~7° 已经是 60~70%。所以头部按参数自身范围的比例驱动，
     // 换模型/换皮也能保持同样的可见幅度。
     var setFraction = function (id, fraction, weight) {
+      id = resolve(id);
+      if (!id) return;
       var idx = -1;
       try { idx = coreModel.getParameterIndex(id); } catch (e) { idx = -1; }
       if (idx < 0) return;
@@ -1042,7 +1056,10 @@
         var lo = coreModel.getParameterMinimumValue(idx);
         var hi = coreModel.getParameterMaximumValue(idx);
         if (!(hi > lo)) return;              // 模型把这个参数锁死了
-        write(id, (lo + hi) / 2 + clamp(fraction, -1, 1) * (hi - lo) / 2 * weight);
+        // 以模型默认值为中心（大多数模型默认 = 区间中点；不对称的模型也不会整体偏移）
+        var m = prof && (function () { for (var k in prof.map) if (prof.map[k].id === id) return prof.map[k]; return null; })();
+        if (m && PA) write(id, PA.toRaw(m, clamp(fraction * weight, -1, 1)));
+        else write(id, (lo + hi) / 2 + clamp(fraction, -1, 1) * (hi - lo) / 2 * weight);
       } catch (e) {
         write(id, fraction * 30);            // 旧运行时没有范围 API，按标准 ±30° 退回
       }
@@ -1073,6 +1090,8 @@
     // 范围里了。这里统一换算成「占参数区间的比例」：±1 模型里同样的意图
     // 只有 1~2‰，±30 的按度模型行为不变。
     var setGaze = function (id, deg) {
+      id = resolve(id);
+      if (!id) return;
       var idx = -1;
       try { idx = coreModel.getParameterIndex(id); } catch (e) { idx = -1; }
       if (idx < 0) return;
@@ -1093,11 +1112,17 @@
     if (typeof opts.breathBase === 'number') {
       // 呼吸单独处理：它不在 frame 里，直接写死 0.45 会在收势那一刻看到胸口「顿」一下。
       // 走同一个 write，按 blend 从当前呼吸相位过渡过去。
-      write('ParamBreath', clamp(opts.breathBase + frame.bounce * 0.08, 0.05, 0.95));
+      var bid = resolve('ParamBreath');
+      if (bid) {
+        // 呼吸按模型区间展开（0..1 之外的模型也一样）
+        var bm = prof && prof.map.breath;
+        var bv = clamp(opts.breathBase + frame.bounce * 0.08, 0.05, 0.95);
+        write(bid, bm ? bm.lo + (bm.hi - bm.lo) * bv : bv);
+      }
     }
   };
 
   MusicGroove.STYLES = STYLES.slice();
-  MusicGroove.REV = 'r16';
+  MusicGroove.REV = 'r17';
   return MusicGroove;
 });

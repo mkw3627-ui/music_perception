@@ -8964,7 +8964,7 @@ class MusicPerceptionPlugin(NekoPluginBase):
     # 和 templates/index.html 里实际那一行保持一致；版本号走主程序的 static_asset_version，
     # 这样主程序更新时会自动失效缓存，也不会因为标记对不上被重复插入一次。
     _BRIDGE_TAG = ('<script src="/static/live2d/music-groove-bridge.js'
-                   '?v={{ static_asset_version }}-lips4-g73"></script>')
+                   '?v={{ static_asset_version }}-lips4-g81"></script>')
 
     def _app_bin_dir(self) -> Path | None:
         """Locate the running app's resources/bin (templates + static live there)."""
@@ -9023,7 +9023,7 @@ class MusicPerceptionPlugin(NekoPluginBase):
         try:
             _shutil.copy2(src, target)
             copied.append(str(target))
-            for name in ('music_groove.js', 'music_visemes.js'):
+            for name in ('live2d_adapt.js', 'param_adapter.js', 'music_groove.js', 'music_visemes.js'):
                 module_src = plugin_live2d / name
                 if module_src.is_file():
                     module_dst = bin_dir / 'static' / 'live2d' / name
@@ -9099,7 +9099,7 @@ class MusicPerceptionPlugin(NekoPluginBase):
         except OSError as exc:
             return Ok({"ok": False, "error": f"还原 index.html 失败：{exc}"})
         removed = []
-        for name in ('music-groove-bridge.js', 'music_groove.js', 'music_visemes.js'):
+        for name in ('music-groove-bridge.js', 'live2d_adapt.js', 'param_adapter.js', 'music_groove.js', 'music_visemes.js'):
             path = bin_dir / 'static' / 'live2d' / name
             try:
                 if path.exists():
