@@ -1,10 +1,12 @@
 """Safe bridge between the plugin's music-only PCM and optional ASR worker."""
 from __future__ import annotations
+
 import json
 import os
-from pathlib import Path
+import queue
 import subprocess
 import sys
+from pathlib import Path
 from typing import Callable
 
 
@@ -38,7 +40,8 @@ def recognize_pcm_isolated(samples, *, python_exe, vendor, worker_script, model_
                                   str(vendor),str(model_dir),str(model_name),'mono16k-v1'],
                                  stdin=subprocess.PIPE,stdout=subprocess.PIPE,
                                  stderr=subprocess.PIPE,env=env,creationflags=flags)
-        if on_process: on_process(child)
+        if on_process:
+            on_process(child)
         stdout,stderr = child.communicate(input=samples.tobytes(),timeout=timeout)
     except subprocess.TimeoutExpired as exc:
         if child is not None:
@@ -48,7 +51,8 @@ def recognize_pcm_isolated(samples, *, python_exe, vendor, worker_script, model_
     except OSError as exc:
         raise LyricsWorkerError('Cannot launch independent lyrics worker') from exc
     finally:
-        if on_process: on_process(None)
+        if on_process:
+            on_process(None)
     if len(stdout)>200000:
         raise LyricsWorkerError('lyrics payload too large')
     try:
@@ -176,23 +180,32 @@ class PersistentLyricsSession:
                 while True:
                     line=child.stdout.readline(self.MAX_REPLY_BYTES+1)
                     if not line:
-                        try:self._queue.put(('exited',child.poll()),timeout=1)
-                        except queue.Full:pass
+                        try:
+                            self._queue.put(('exited',child.poll()),timeout=1)
+                        except queue.Full:
+                            pass
                         break
                     if len(line)>self.MAX_REPLY_BYTES or not line.endswith(b'\n'):
-                        try:self._queue.put(('reply_too_large',len(line)),timeout=1)
-                        except queue.Full:pass
+                        try:
+                            self._queue.put(('reply_too_large',len(line)),timeout=1)
+                        except queue.Full:
+                            pass
                         break
                     if not line.lstrip().startswith(b'{'):
                         noisy+=1
-                        if noisy<=32:continue
-                        try:self._queue.put(('stdout_contamination',noisy),timeout=1)
-                        except queue.Full:pass
+                        if noisy<=32:
+                            continue
+                        try:
+                            self._queue.put(('stdout_contamination',noisy),timeout=1)
+                        except queue.Full:
+                            pass
                         break
                     self._queue.put(line,timeout=2)
             except (OSError,ValueError) as exc:
-                try:self._queue.put(('read_error',type(exc).__name__),timeout=1)
-                except queue.Full:pass
+                try:
+                    self._queue.put(('read_error',type(exc).__name__),timeout=1)
+                except queue.Full:
+                    pass
             except queue.Full:
                 pass
         # Each session owns exactly one reader: do not enqueue a stray None
@@ -264,7 +277,7 @@ class PersistentLyricsSession:
                 raise LyricsWorkerError('歌词识别子进程已关闭或通信失败') from exc
             if not isinstance(line,(bytes,bytearray)):
                 issue=(line[0] if isinstance(line,tuple) and line else 'exited')
-                exit_code=child_code=None
+                exit_code=None
                 if self._child is not None:
                     # stdout EOF can arrive before the process fully exits;
                     # wait briefly so the real return code is reported.
@@ -338,18 +351,25 @@ class PersistentLyricsSession:
             self._child = None
             if child is not None:
                 if child.poll() is None:
-                    try: child.terminate()
-                    except OSError: pass
-                    try: child.wait(timeout=1)
+                    try:
+                        child.terminate()
+                    except OSError:
+                        pass
+                    try:
+                        child.wait(timeout=1)
                     except subprocess.TimeoutExpired:
                         child.kill()
                         child.wait(timeout=1)
                 for pipe in (child.stdin, child.stdout):
-                    try: pipe.close()
-                    except (OSError, ValueError): pass
+                    try:
+                        pipe.close()
+                    except (OSError, ValueError):
+                        pass
                 if self.on_process:
-                    try: self.on_process(None)
-                    except Exception: pass
+                    try:
+                        self.on_process(None)
+                    except Exception:
+                        pass
 
     @property
     def running(self) -> bool:

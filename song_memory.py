@@ -6,14 +6,14 @@ observations without treating two ordinary music windows as the same song.
 No identity is derived from a title alone or an unverified tempo similarity.
 """
 from __future__ import annotations
-from collections import deque
+
 import copy
 import hashlib
 import json
 import os
-from pathlib import Path
 import threading
-
+from collections import deque
+from pathlib import Path
 
 QUALITY_MODEL = {'low': 'tiny', 'medium': 'base', 'high': 'small',
                  'ultra': 'large-v3-turbo'}
@@ -197,11 +197,15 @@ class RecentSongMemory:
                         e['status'] = 'ended'
                     e['end_reason'] = reason
                     if position_s is not None:
-                        try: e['end_position_s'] = round(max(0., float(position_s)), 2)
-                        except (TypeError, ValueError): pass
+                        try:
+                            e['end_position_s'] = round(max(0., float(position_s)), 2)
+                        except (TypeError, ValueError):
+                            pass
                     if duration_s is not None:
-                        try: e['duration_s'] = round(max(0., float(duration_s)), 2)
-                        except (TypeError, ValueError): pass
+                        try:
+                            e['duration_s'] = round(max(0., float(duration_s)), 2)
+                        except (TypeError, ValueError):
+                            pass
                     position, duration = e.get('end_position_s'), e.get('duration_s')
                     e['interrupted_early'] = (e['status'] == 'switched' and
                         position is not None and duration is not None and duration > 0 and
@@ -276,7 +280,8 @@ class RecentSongMemory:
                     media=float(media_start_s)
                     if 0<=media<=86400 and __import__('math').isfinite(media):
                         scene['media_start_s']=round(media,2)
-                except (TypeError,ValueError):pass
+                except (TypeError,ValueError):
+                    pass
             segments.append(scene)
             segments[:] = segments[-20:]
             self._save()
@@ -413,5 +418,7 @@ class RecentSongMemory:
         with self._lock:
             self._entries.clear()
             if self.path:
-                try: self.path.unlink(missing_ok=True)
-                except OSError: pass
+                try:
+                    self.path.unlink(missing_ok=True)
+                except OSError:
+                    pass

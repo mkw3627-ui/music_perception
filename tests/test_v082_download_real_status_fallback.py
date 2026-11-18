@@ -7,11 +7,9 @@ import asyncio
 import hashlib
 import io
 import json
-from pathlib import Path
 
 import pytest
 from music_perception import lyrics_model_store as store
-from test_plugin import plugin_fixture
 
 
 def test_model_download_eof_does_not_promote_then_range_resumes(tmp_path, monkeypatch):
@@ -26,11 +24,16 @@ def test_model_download_eof_does_not_promote_then_range_resumes(tmp_path, monkey
             self.data = io.BytesIO(content)
             self.status = code
             self.headers = headers
-        def __enter__(self): return self
-        def __exit__(self, *args): return False
-        def read(self, n): return self.data.read(n)
-        def geturl(self): return url
-        def getcode(self): return self.status
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            return False
+        def read(self, n):
+            return self.data.read(n)
+        def geturl(self):
+            return url
+        def getcode(self):
+            return self.status
 
     def first(_req, **_kw):
         return Response(interrupted, 200, {'Content-Length': str(len(good))})
@@ -60,7 +63,8 @@ def test_verified_hf_cache_not_ignored_when_plugin_model_dir_is_empty(plugin_fix
     plugin,*_ = plugin_fixture
     hf_cache = tmp_path/'huggingface'/'snapshot'
     hf_cache.mkdir(parents=True)
-    weight=hf_cache/'model.bin'; weight.write_bytes(b'already-verified-by-worker')
+    weight=hf_cache/'model.bin'
+    weight.write_bytes(b'already-verified-by-worker')
     (hf_cache/'config.json').write_text('{"description":"synthetic test config"}')
     (hf_cache/'tokenizer.json').write_text('{"description":"synthetic test tokenizer"}')
     (hf_cache/'vocabulary.txt').write_text('SYNTHETIC CT2 VOCABULARY FOR TEST')
@@ -91,7 +95,8 @@ def test_verified_hf_cache_not_ignored_when_plugin_model_dir_is_empty(plugin_fix
 def test_preparation_file_audit_has_no_fake_download_progress(plugin_fixture):
     plugin,*_ = plugin_fixture
     class LiveWorker:
-        def is_alive(self):return True
+        def is_alive(self):
+            return True
     async def scenario():
         await plugin.startup()
         plugin._lyrics_prepare_thread=LiveWorker()

@@ -1,15 +1,14 @@
 """v0.9.5: CUDA DLLs belong to plugin data and are never mistaken for GPU proof."""
 import hashlib
 import json
-from pathlib import Path
 import os
-import sys
 import zipfile
+from pathlib import Path
 
 import pytest
+from _version import plugin_version, ui_build  # noqa: E402
 from music_perception import stem_cuda_bundle as cb
 from music_perception import stem_gpu_runtime as gpu
-from _version import ui_build, panel_ui_build, plugin_version  # noqa: E402
 
 
 def build_fake_bundle(tmp_path):
@@ -60,14 +59,16 @@ def test_mirror_requires_https_and_pinned_package_name():
     spec=cb.CUDA_WHEELS[0]
     assert cb._sources(spec['package'],spec['version'],'official')[0][0]=='PyPI 官方'
     assert cb._sources(spec['package'],spec['version'],'mirror')[0][0]=='清华镜像'
-    with pytest.raises(cb.PrivateCudaError):cb._sources('arbitrary','1','evil')
+    with pytest.raises(cb.PrivateCudaError):
+        cb._sources('arbitrary','1','evil')
 
 
 def test_cuda_wheel_rejects_zip_slip(tmp_path):
     archive=tmp_path/'malicious.whl'
     with zipfile.ZipFile(archive,'w') as zipped:
         zipped.writestr('../inject.dll','malware')
-    dest=tmp_path/'staging';dest.mkdir()
+    dest=tmp_path/'staging'
+    dest.mkdir()
     with pytest.raises(cb.PrivateCudaError,match='Unsafe'):
         cb._safe_extract_wheel(archive,dest,cb.CUDA_WHEELS[0])
     assert not (tmp_path/'inject.dll').exists()
@@ -77,7 +78,8 @@ def test_cuda_wheel_rejects_host_python_package_injection(tmp_path):
     archive=tmp_path/'wrong.whl'
     with zipfile.ZipFile(archive,'w') as zipped:
         zipped.writestr('sitecustomize.py','bad')
-    dest=tmp_path/'stage';dest.mkdir()
+    dest=tmp_path/'stage'
+    dest.mkdir()
     with pytest.raises(cb.PrivateCudaError,match='unexpected filesystem'):
         cb._safe_extract_wheel(archive,dest,cb.CUDA_WHEELS[0])
 
@@ -88,7 +90,8 @@ def test_cuda_wheel_can_extract_nvidia_bin_and_distinfo(tmp_path):
     with zipfile.ZipFile(archive,'w') as zipped:
         zipped.writestr('nvidia/cuda_runtime/bin/cudart64_12.dll','testdata')
         zipped.writestr(f"{spec['package'].replace('-','_')}-{spec['version']}.dist-info/METADATA",'Name: test')
-    dest=tmp_path/'stage';dest.mkdir()
+    dest=tmp_path/'stage'
+    dest.mkdir()
     cb._safe_extract_wheel(archive,dest,spec)
     assert (dest/'nvidia/cuda_runtime/bin/cudart64_12.dll').is_file()
 
@@ -187,7 +190,8 @@ def test_cuda_full_offline_installer_atomic_and_idempotent(monkeypatch,tmp_path)
             kwargs['transfer_progress'](dest.stat().st_size,dest.stat().st_size,False)
     monkeypatch.setattr(lyrics_model_store,'_stream_to_file',download)
     monkeypatch.setattr(cb.shutil,'disk_usage',lambda _p:type('usage',(),{'free':10**10})())
-    vendor=tmp_path/'env'/'vendor';vendor.mkdir(parents=True)
+    vendor=tmp_path/'env'/'vendor'
+    vendor.mkdir(parents=True)
     (vendor/'sentinel').write_text('keep')
     status=tmp_path/'env'/'status.json'
     assert cb.install_cuda_runtime(vendor.parent,status,'official')
@@ -213,6 +217,7 @@ def test_install_download_failure_has_no_activated_cuda(monkeypatch,tmp_path):
 
 def test_status_lock_does_not_kill_installer(monkeypatch,tmp_path):
     import errno
+
     from music_perception import stem_gpu_runtime as gpu
     original=gpu.os.replace
     attempts=[]

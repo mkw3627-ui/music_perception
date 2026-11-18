@@ -6,11 +6,8 @@ SHA-256 is pinned is accepted. A failed download never activates an overlay.
 """
 from __future__ import annotations
 
-import hashlib
-from html.parser import HTMLParser
 import json
 import os
-from pathlib import Path
 import shutil
 import sys
 import time
@@ -18,6 +15,8 @@ import urllib.parse
 import urllib.request
 import uuid
 import zipfile
+from html.parser import HTMLParser
+from pathlib import Path
 
 GPU_PACKAGE_VERSION = '1.26.0'  # pinned CUDA 12.8/cuDNN 9 GPU binary
 GPU_WHEEL = 'onnxruntime_gpu-1.26.0-cp311-cp311-win_amd64.whl'
@@ -56,9 +55,9 @@ def overlay_path(environment_dir):
 
 def inventory(environment_dir):
     try:
-        from .stem_cuda_bundle import cuda_runtime_path, runtime_inventory, CUDA_ESTIMATED_DOWNLOAD_BYTES
+        from .stem_cuda_bundle import CUDA_ESTIMATED_DOWNLOAD_BYTES, cuda_runtime_path, runtime_inventory
     except ImportError:
-        from stem_cuda_bundle import cuda_runtime_path, runtime_inventory, CUDA_ESTIMATED_DOWNLOAD_BYTES
+        from stem_cuda_bundle import CUDA_ESTIMATED_DOWNLOAD_BYTES, cuda_runtime_path, runtime_inventory
     installed = overlay_path(environment_dir)
     cuda = cuda_runtime_path(environment_dir)
     return {'installed': installed is not None and cuda is not None,
@@ -112,7 +111,8 @@ class _WheelLinks(HTMLParser):
         super().__init__()
         self.urls=[]
     def handle_starttag(self, tag, attrs):
-        if tag != 'a': return
+        if tag != 'a':
+            return
         href = dict(attrs).get('href', '')
         if Path(urllib.parse.unquote(urllib.parse.urlsplit(href).path)).name == GPU_WHEEL:
             self.urls.append(href)
@@ -120,7 +120,8 @@ class _WheelLinks(HTMLParser):
 
 def _index_urls(priority):
     """Only pinned wheel URLs from trusted PyPI and HTTPS mirror indexes."""
-    if priority not in ('mirror','official'): raise StemGpuInstallError('invalid source preference')
+    if priority not in ('mirror','official'):
+        raise StemGpuInstallError('invalid source preference')
     providers = (('清华镜像', 'https://pypi.tuna.tsinghua.edu.cn/simple/onnxruntime-gpu/'),
                  ('阿里云镜像', 'https://mirrors.aliyun.com/pypi/simple/onnxruntime-gpu/'),
                  ('PyPI 官方', 'https://pypi.org/pypi/onnxruntime-gpu/1.26.0/json'))
@@ -133,17 +134,20 @@ def _fetch_source(index_url):
         if urllib.parse.urlsplit(response.geturl()).scheme != 'https':
             raise StemGpuInstallError('non-HTTPS index redirect blocked')
         index = response.read(2_000_000)
-        if len(index) >= 2_000_000: raise StemGpuInstallError('wheel index too large')
+        if len(index) >= 2_000_000:
+            raise StemGpuInstallError('wheel index too large')
     if index_url.endswith('/json'):
         info=json.loads(index)
         candidates=[x for x in info.get('urls',[]) if x.get('filename') == GPU_WHEEL
                     and x.get('digests',{}).get('sha256') == GPU_WHEEL_SHA256]
-        if not candidates: raise StemGpuInstallError('official wheel hash not found')
+        if not candidates:
+            raise StemGpuInstallError('official wheel hash not found')
         url=candidates[0]['url']
         if urllib.parse.urlsplit(url).hostname != 'files.pythonhosted.org':
             raise StemGpuInstallError('untrusted official wheel CDN')
         return url
-    parser=_WheelLinks();parser.feed(index.decode('utf-8','replace'))
+    parser=_WheelLinks()
+    parser.feed(index.decode('utf-8','replace'))
     host=urllib.parse.urlsplit(index_url).hostname
     for href in parser.urls:
         url=urllib.parse.urljoin(index_url,href)
@@ -160,7 +164,8 @@ def _check_platform():
 
 def _install_wheel(wheel: Path, directory: Path):
     """Safely extract a verified wheel to a new directory; don't touch live DLLs."""
-    if not wheel.is_file(): raise StemGpuInstallError('GPU wheel missing')
+    if not wheel.is_file():
+        raise StemGpuInstallError('GPU wheel missing')
     directory.mkdir(parents=True,exist_ok=False)
     unpacked=0
     with zipfile.ZipFile(wheel) as archive:
@@ -171,9 +176,12 @@ def _install_wheel(wheel: Path, directory: Path):
                     '..' in parts or ':' in name or member.file_size > 350_000_000):
                 raise StemGpuInstallError('unsafe GPU wheel member rejected')
             unpacked+=member.file_size
-            if unpacked > 1_500_000_000: raise StemGpuInstallError('GPU wheel expanded size limit exceeded')
+            if unpacked > 1_500_000_000:
+                raise StemGpuInstallError('GPU wheel expanded size limit exceeded')
             dest=directory.joinpath(*parts)
-            if member.is_dir():dest.mkdir(parents=True,exist_ok=True);continue
+            if member.is_dir():
+                dest.mkdir(parents=True,exist_ok=True)
+                continue
             dest.parent.mkdir(parents=True,exist_ok=True)
             with archive.open(member) as src, dest.open('wb') as out:
                 shutil.copyfileobj(src,out,1024*1024)
@@ -200,9 +208,9 @@ def install_gpu(environment_dir, status_path, priority='mirror'):
     wheel.parent.mkdir(parents=True,exist_ok=True)
     errors=[]
     try:
-        from .lyrics_model_store import _stream_to_file, _file_sha256
+        from .lyrics_model_store import _file_sha256, _stream_to_file
     except ImportError:  # independent -I -S installer imports by local filename
-        from lyrics_model_store import _stream_to_file, _file_sha256
+        from lyrics_model_store import _file_sha256, _stream_to_file
     try:
         from .download_telemetry import TransferMeter
     except ImportError:
@@ -269,4 +277,5 @@ def install_gpu(environment_dir, status_path, priority='mirror'):
                 message=f'GPU 安装未启用：{type(exc).__name__}: {str(exc)[:340]}')
         return False
     finally:
-        if staging.exists():shutil.rmtree(staging,ignore_errors=True)
+        if staging.exists():
+            shutil.rmtree(staging,ignore_errors=True)

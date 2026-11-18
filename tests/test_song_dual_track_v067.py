@@ -1,20 +1,16 @@
 """No private audio, network, system devices, or large pretrained models needed."""
 from __future__ import annotations
+
 import asyncio
 import json
-from pathlib import Path
-import time
+
 import numpy as np
-from music_perception.song_memory import RecentSongMemory
-from music_perception.song_change import SongChangeDetector
-from music_perception.music_harmony import (chord_change_candidates,
-                                             beat_accent_candidates,
-                                             metrical_grouping_candidates)
-from music_perception.lyrics_continuity import join_song_audio,merge_song_lyrics
 from music_perception.auto_listener import FinishedClip
-from music_perception.music_events import offset_event_timeline,compact_music_context
-from music_perception import MusicPerceptionPlugin
-from test_plugin import plugin_fixture
+from music_perception.lyrics_continuity import join_song_audio, merge_song_lyrics
+from music_perception.music_events import compact_music_context, offset_event_timeline
+from music_perception.music_harmony import beat_accent_candidates, chord_change_candidates, metrical_grouping_candidates
+from music_perception.song_change import SongChangeDetector
+from music_perception.song_memory import RecentSongMemory
 
 
 def _frame(freqs, bpm):
@@ -41,8 +37,10 @@ def test_audio_only_transition_requires_sustained_combined_melody_rhythm_timbre_
 def test_no_false_boundary_from_simple_volume_change():
     detector=SongChangeDetector()
     before=_frame([220,261.63,329.63],120)
-    for _ in range(12):assert detector.feed(before,is_music=True) is None
-    for _ in range(10):assert detector.feed(before*.5,is_music=True) is None
+    for _ in range(12):
+        assert detector.feed(before,is_music=True) is None
+    for _ in range(10):
+        assert detector.feed(before*.5,is_music=True) is None
 
 
 def test_lyrics_overlap_only_consecutive_same_song():
@@ -122,7 +120,8 @@ def test_track_state_retains_previous_and_current_not_third(plugin_fixture):
     plugin,_,_,_=plugin_fixture
     async def check():
         await plugin.startup()
-        plugin._auto_consented=True;plugin._ai_delivery=True
+        plugin._auto_consented=True
+        plugin._ai_delivery=True
         plugin._listener_session=2
         for seq in (1,2,3):
             plugin._on_track_boundary('track_started',seq)
@@ -139,9 +138,9 @@ def test_track_state_retains_previous_and_current_not_third(plugin_fixture):
 
 
 def test_player_authorized_local_lrc_needs_title_and_player_clock(tmp_path):
-    from music_perception.player_lyrics import (find_authorized_player_lrc,
-                                                preview_player_lyrics)
-    root=tmp_path/'music';root.mkdir()
+    from music_perception.player_lyrics import find_authorized_player_lrc, preview_player_lyrics
+    root=tmp_path/'music'
+    root.mkdir()
     (root/'Demo Song.lrc').write_text('[00:12.00]候选一句\n[00:15.00]second line',encoding='utf-8')
     found=find_authorized_player_lrc('Demo Song','', [root])
     assert len(found)==2
@@ -158,11 +157,13 @@ def test_audio_boundary_invalidates_old_lrc_without_mixing_tracks(plugin_fixture
     plugin,_,_,_=plugin_fixture
     async def check():
         await plugin.startup()
-        plugin._auto_consented=True;plugin._ai_delivery=True
+        plugin._auto_consented=True
+        plugin._ai_delivery=True
         plugin._listener_session=1
         plugin._track_metadata_key=('source','player','old','artist','0')
         plugin._player_lrc_lines=[{'at_s':2,'text':'旧歌词'}]
-        plugin._active_track_sequence=4;plugin._song_boundary_enforced=True
+        plugin._active_track_sequence=4
+        plugin._song_boundary_enforced=True
         plugin._on_track_boundary('track_ended_audio',4)
         assert plugin._player_lrc_lines==[]
         assert plugin._player_metadata_unreliable_key==('source','player','old','artist','0')
@@ -173,11 +174,11 @@ def test_audio_boundary_invalidates_old_lrc_without_mixing_tracks(plugin_fixture
 
 
 def test_lyrics_are_queued_before_expensive_chord_rhythm_analysis(plugin_fixture,monkeypatch):
-    import music_perception as plugin_module
     plugin,_,_,_=plugin_fixture
     async def check():
         await plugin.startup()
-        plugin._auto_consented=True;plugin._ai_delivery=True
+        plugin._auto_consented=True
+        plugin._ai_delivery=True
         plugin._listener_session=1
         plugin._on_track_boundary('track_started',1)
         plugin._live_session_config={'segment_seconds':10,'max_seconds':900,

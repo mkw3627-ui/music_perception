@@ -1,16 +1,14 @@
 """Low-load ASR model reuse, optional GPU, and bounded child IPC. No download."""
 from __future__ import annotations
-import os
+
+import sys
 from pathlib import Path
 from types import SimpleNamespace
-import sys
-import time
-import numpy as np
-import pytest
 
+import pytest
 from music_perception.lyrics_backend import transcribe_singing_candidate
-from music_perception.lyrics_bridge import PersistentLyricsSession, LyricsWorkerError
-from test_lyrics_v063 import pcm, FakeSegment, plugin_fixture
+from music_perception.lyrics_bridge import LyricsWorkerError, PersistentLyricsSession
+from test_lyrics_v063 import FakeSegment, pcm
 
 
 class TinyFake:
@@ -77,8 +75,10 @@ while True:
 
 
 def test_persistent_worker_reuses_one_process_across_chunks(tmp_path):
-    vendor=tmp_path/'vendor';vendor.mkdir()
-    fake=tmp_path/'fake_stream.py';_make_fake_stream_worker(fake)
+    vendor=tmp_path/'vendor'
+    vendor.mkdir()
+    fake=tmp_path/'fake_stream.py'
+    _make_fake_stream_worker(fake)
     tracked=[]
     session=PersistentLyricsSession(
         python_exe=sys.executable,vendor=vendor,worker_script=fake,
@@ -99,8 +99,10 @@ def test_persistent_worker_reuses_one_process_across_chunks(tmp_path):
 
 
 def test_hung_asr_worker_killed_before_next_song(tmp_path):
-    vendor=tmp_path/'vendor';vendor.mkdir()
-    fake=tmp_path/'hang.py';_make_fake_stream_worker(fake,halt=True)
+    vendor=tmp_path/'vendor'
+    vendor.mkdir()
+    fake=tmp_path/'hang.py'
+    _make_fake_stream_worker(fake,halt=True)
     session=PersistentLyricsSession(python_exe=sys.executable,vendor=vendor,
         worker_script=fake, model_dir=tmp_path/'weights',timeout=.2)
     with pytest.raises(LyricsWorkerError,match='超时'):
@@ -138,7 +140,8 @@ def test_local_lyrics_continue_without_ai_sharing(plugin_fixture):
 
 
 def test_revoked_ai_delivery_keeps_local_lyrics_but_sends_no_chat(plugin_fixture):
-    import asyncio,threading
+    import asyncio
+
     from music_perception.auto_listener import FinishedClip
     plugin,_,_,pushed=plugin_fixture
     async def run():

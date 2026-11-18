@@ -7,10 +7,8 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import time
-
-import pytest
+from pathlib import Path
 
 from music_perception import stem_gpu_probe_worker as probe
 from music_perception import stem_mdx
@@ -43,7 +41,8 @@ def test_cuda_profile_json_permanent_lock_returns_evidence_error(monkeypatch,tmp
     path=_trace(tmp_path)
     original=Path.read_text
     def reader(self,*args,**kw):
-        if self==path:raise PermissionError(32,'WinError32')
+        if self==path:
+            raise PermissionError(32,'WinError32')
         return original(self,*args,**kw)
     monkeypatch.setattr(Path,'read_text',reader)
     monkeypatch.setattr(probe.time,'sleep',lambda _:None)
@@ -53,7 +52,8 @@ def test_cuda_profile_json_permanent_lock_returns_evidence_error(monkeypatch,tmp
 
 
 def test_profile_cleanup_retries_windows_file_lock(monkeypatch,tmp_path):
-    root=tmp_path/'owned';root.mkdir()
+    root=tmp_path/'owned'
+    root.mkdir()
     (root/'sample.json').write_text('{}')
     actual=probe.shutil.rmtree
     attempts=[]
@@ -82,14 +82,18 @@ def test_permanent_profile_lock_is_not_gpu_failure(monkeypatch,tmp_path):
 def test_gpu_session_is_released_before_deleting_its_profile(monkeypatch,tmp_path):
     released=[]
     class FakeORTSession:
-        def __init__(self, root):self.root=root
-        def end_profiling(self):return str(_trace(self.root))
+        def __init__(self, root):
+            self.root=root
+        def end_profiling(self):
+            return str(_trace(self.root))
     class FakeMDX:
         def __init__(self, model_path, request_gpu=False, profile_dir=None):
             assert request_gpu
             self.session=FakeORTSession(profile_dir)
-        def separate(self, *args, **kwargs):return {'device':'cuda'}
-        def __del__(self):released.append(True)
+        def separate(self, *args, **kwargs):
+            return {'device':'cuda'}
+        def __del__(self):
+            released.append(True)
     monkeypatch.setattr(stem_mdx,'TwoStemMDX',FakeMDX)
     monkeypatch.setattr(probe,'_clean_old_profile_dirs',lambda:None)
     original=probe._remove_profile_dir
@@ -106,11 +110,15 @@ def test_gpu_session_is_released_before_deleting_its_profile(monkeypatch,tmp_pat
 
 def test_gpu_profile_cleanup_lock_keeps_verified_inference(monkeypatch,tmp_path):
     class FakeORTSession:
-        def __init__(self,root):self.root=root
-        def end_profiling(self):return str(_trace(self.root))
+        def __init__(self,root):
+            self.root=root
+        def end_profiling(self):
+            return str(_trace(self.root))
     class FakeMDX:
-        def __init__(self,*a,profile_dir=None,**kw):self.session=FakeORTSession(profile_dir)
-        def separate(self,*a,**kw):return {'device':'cuda'}
+        def __init__(self,*a,profile_dir=None,**kw):
+            self.session=FakeORTSession(profile_dir)
+        def separate(self,*a,**kw):
+            return {'device':'cuda'}
     monkeypatch.setattr(stem_mdx,'TwoStemMDX',FakeMDX)
     monkeypatch.setattr(probe,'_clean_old_profile_dirs',lambda:None)
     monkeypatch.setattr(probe,'_remove_profile_dir',lambda _path:False)
@@ -124,9 +132,11 @@ def test_gpu_profile_cleanup_lock_keeps_verified_inference(monkeypatch,tmp_path)
 
 def test_cleanup_old_profiles_does_not_touch_current_probe(tmp_path):
     recent=tmp_path/(probe.PROFILE_PREFIX+'recent')
-    recent.mkdir();_trace(recent)
+    recent.mkdir()
+    _trace(recent)
     old=tmp_path/(probe.PROFILE_PREFIX+'old')
-    old.mkdir();_trace(old)
+    old.mkdir()
+    _trace(old)
     timestamp=time.time()-7200
     os.utime(old,(timestamp,timestamp))
     other=tmp_path/'completely_unrelated_folder'

@@ -141,7 +141,8 @@ def condensed_history_item(context: dict) -> dict:
     matrix = []
     for r in range(0, len(cells), 4):
         block = cells[r:r+4]
-        if not block: break
+        if not block:
+            break
         matrix.append([round(sum(row[c] for row in block for c in range(f, min(f+4, len(row))))/
                              sum(min(4, len(row)-f) for row in block))
                        for f in range(0, len(block[0]), 4)])

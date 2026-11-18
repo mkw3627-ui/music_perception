@@ -1,10 +1,11 @@
+import importlib
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from video_window import decide_video_window  # noqa: E402
+decide_video_window = importlib.import_module("video_window").decide_video_window
 
 
 def test_position_known_processes_from_position_bounded_by_duration():

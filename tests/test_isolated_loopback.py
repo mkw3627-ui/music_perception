@@ -3,21 +3,20 @@ from __future__ import annotations
 
 import io
 import json
-import time
-from pathlib import Path
 import struct
 import subprocess
 import sys
-import types
+import time
 import tomllib
+import types
+from pathlib import Path
 
-import numpy as np
-import pytest
-
-from music_perception.auto_listener import ListenerError, SoundCardLoopback
 import music_perception.isolated_loopback as iso
 import music_perception.loopback_worker as worker
-from _version import ui_build, panel_ui_build, plugin_version  # noqa: E402
+import numpy as np
+import pytest
+from _version import plugin_version  # noqa: E402
+from music_perception.auto_listener import ListenerError, SoundCardLoopback
 
 
 class FakeProcess:
@@ -44,9 +43,12 @@ def pack(tag, obj):
 
 
 def fake_files(tmp_path):
-    v = tmp_path / 'vendor';v.mkdir()
-    script = tmp_path / 'loopback_worker.py';script.write_text('# fake')
-    python = tmp_path / 'python.exe';python.write_bytes(b'placeholder')
+    v = tmp_path / 'vendor'
+    v.mkdir()
+    script = tmp_path / 'loopback_worker.py'
+    script.write_text('# fake')
+    python = tmp_path / 'python.exe'
+    python.write_bytes(b'placeholder')
     return python, v, script, tmp_path / 'diagnostics.log'
 
 
@@ -96,7 +98,8 @@ def test_worker_error_identifies_failure_stage_without_guessing(monkeypatch, tmp
     capture, procs = prepare(monkeypatch, tmp_path,
                              pack(b'E', {'stage':'打开回环录音器', 'error':'RuntimeError: Error 0x10000001'}))
     with pytest.raises(ListenerError, match=r'打开回环录音器.*0x10000001'):
-        with capture: pass
+        with capture:
+            pass
     assert procs[0].terminated
 
 
@@ -121,31 +124,38 @@ def test_no_nuitka_server_fallback_and_absent_vendor(monkeypatch, tmp_path):
     source = iso.IsolatedWindowsLoopback(python=tmp_path/'projectneko_server.exe',
                                         vendor=vendor,worker_script=script,diagnostics=log)
     with pytest.raises(ListenerError,match='独立 python.exe'):
-        with source: pass
+        with source:
+            pass
     vendor.rmdir()
     source = iso.IsolatedWindowsLoopback(python=python,vendor=vendor,worker_script=script,diagnostics=log)
     with pytest.raises(ListenerError,match='音频依赖目录'):
-        with source: pass
+        with source:
+            pass
 
 
 def test_loopback_capture_rate_44100_preserves_16khz_size(monkeypatch):
     import music_perception.auto_listener as module
     monkeypatch.setattr(module.sys,'platform','linux')
     class Sc:
-        def default_speaker(self):return types.SimpleNamespace(id='s',channels=2)
-        def all_microphones(self,**kwargs):return [types.SimpleNamespace(id='s.monitor',name='s.monitor')]
+        def default_speaker(self):
+            return types.SimpleNamespace(id='s',channels=2)
+        def all_microphones(self,**kwargs):
+            return [types.SimpleNamespace(id='s.monitor',name='s.monitor')]
     class Rec:
         def record(self,**kwargs):
             assert kwargs['numframes'] == 88200
             return np.zeros((88200,2),dtype=np.float32)
-        def __enter__(self):return self
-        def __exit__(self,*_):pass
+        def __enter__(self):
+            return self
+        def __exit__(self,*_):
+            pass
     class Monitor:
         id='s.monitor'
         def recorder(self, **kwargs):
             assert kwargs['samplerate']==44100
             return Rec()
-    fake = Sc();fake.all_microphones=lambda **kwargs:[Monitor()]
+    fake = Sc()
+    fake.all_microphones=lambda **kwargs:[Monitor()]
     monkeypatch.setitem(sys.modules,'soundcard',fake)
     with SoundCardLoopback(capture_rate=44100) as source:
         audio=source.read()
@@ -165,13 +175,16 @@ def test_worker_protocol_error_on_other_os(monkeypatch,tmp_path):
 
 
 def test_environment_worker_config_never_selects_host_executable(tmp_path):
-    from music_perception.runtime_environment import MusicEnvironment, EnvironmentError
-    data=tmp_path/'data';source=tmp_path/'source';source.mkdir()
+    from music_perception.runtime_environment import EnvironmentError, MusicEnvironment
+    data=tmp_path/'data'
+    source=tmp_path/'source'
+    source.mkdir()
     env=MusicEnvironment(source=source,data=data,models=data/'models')
     with pytest.raises(EnvironmentError,match='尚未就绪'):
         env.worker_runtime()
     env._python_path = '/fake/python.exe'
-    env._active_vendor = data/'vendor';env._active_vendor.mkdir()
+    env._active_vendor = data/'vendor'
+    env._active_vendor.mkdir()
     env._report(ready=True)
     p, v = env.worker_runtime()
     assert p=='/fake/python.exe' and v == env._active_vendor.resolve()
@@ -182,12 +195,12 @@ def test_timeout_kills_stalled_worker_without_hanging_ui(monkeypatch, tmp_path):
     monkeypatch.setattr(iso,'FRAME_TIMEOUT_SECONDS',.05)
     with cap as source:
         # A worker that never produces an audio frame must not trap the listener.
-        import io
         class FrozenPipe:
             def read(self, n):
                 time.sleep(.2)
                 return b''
-            def close(self):pass
+            def close(self):
+                pass
         procs[0].stdout=FrozenPipe()
         with pytest.raises(ListenerError,match='没有收到扬声器音频帧'):
             source.read()
@@ -196,8 +209,7 @@ def test_timeout_kills_stalled_worker_without_hanging_ui(monkeypatch, tmp_path):
 
 def test_windows_plugin_chooses_isolated_worker_not_inprocess_com(monkeypatch, tmp_path):
     import asyncio
-    import music_perception as plugin_module
-    import music_perception.auto_listener as auto
+
     from test_plugin_contract import build_plugin
     plugin, _ = build_plugin(monkeypatch, tmp_path)
     actual_module = sys.modules[plugin.__class__.__module__]
@@ -212,8 +224,10 @@ def test_windows_plugin_chooses_isolated_worker_not_inprocess_com(monkeypatch, t
     vendor.mkdir(parents=True)
 
     class Env:
-        def snapshot(self):return {'ready':True, 'model_ready':True}
-        def worker_runtime(self):return str(tmp_path / 'python.exe'), vendor
+        def snapshot(self):
+            return {'ready':True, 'model_ready':True}
+        def worker_runtime(self):
+            return str(tmp_path / 'python.exe'), vendor
 
     class FakeListener:
         def __init__(self, **kwargs):

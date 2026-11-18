@@ -4,6 +4,7 @@ Started by the plugin's isolated managed Python. The result is preliminary:
 the first real model inference still needs compatible GPU DLLs (CUDA 12/cuDNN 9).
 """
 from __future__ import annotations
+
 import json
 import pathlib
 import sys

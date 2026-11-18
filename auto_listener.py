@@ -6,14 +6,15 @@ thread owns the SoundCard recorder (required for CoreAudio/WASAPI lifecycles).
 """
 from __future__ import annotations
 
+import sys
+import threading
+import time
 from collections import deque
 from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
-import threading
-import time
-import sys
 from typing import Callable
+
 from .song_change import SongChangeDetector
 
 SAMPLE_RATE = 16000
@@ -281,8 +282,10 @@ class MusicClipCollector:
             # Append ONLY a YAMNet-confirmed music frame, not a rejected gap.
             self._music.append(samples.copy())
             if self._music_full:
-                if full_band is None: self._music_full.clear()
-                else: self._music_full.append(np.asarray(full_band,dtype=np.float32).copy())
+                if full_band is None:
+                    self._music_full.clear()
+                else:
+                    self._music_full.append(np.asarray(full_band,dtype=np.float32).copy())
             self._buffer_samples += samples.size
             self._total_samples += samples.size
             self._music_windows += 1
@@ -415,9 +418,10 @@ class SoundCardLoopback:
                             else np.repeat(stereo[:, :1], 2, axis=1).copy())
 
     def read(self):
+        import math
+
         import numpy as np
         from scipy.signal import resample_poly
-        import math
         stereo = self._record(WINDOW_SECONDS)
         self._stereo_of(stereo)
         mono = stereo.mean(axis=1)
@@ -489,11 +493,14 @@ class RapidLyricsSampler:
             samples = np.asarray(frame, dtype=np.float32).reshape(-1)
             full = (full_band_frames[i] if full_band_frames and i < len(full_band_frames)
                     else None)
-            if full is None: self._full_ok = False
+            if full is None:
+                self._full_ok = False
             elif self._full_ok:
                 full = np.asarray(full,dtype=np.float32)
-                if full.ndim != 2 or full.shape[1] != 2: self._full_ok = False
-                else: self._full_frames.append(full.copy())
+                if full.ndim != 2 or full.shape[1] != 2:
+                    self._full_ok = False
+                else:
+                    self._full_frames.append(full.copy())
             if samples.size:
                 self._frames.append(samples.copy())
                 self._pending += samples.size
@@ -693,7 +700,8 @@ class LiveListener:
                         previous_sequence = collector._sequence
                         collector.discard()
                         full_candidates.clear()
-                        if lyrics_sampler: lyrics_sampler.reset()
+                        if lyrics_sampler:
+                            lyrics_sampler.reset()
                         self._audio_boundary_detector.reset()
                         if self._on_track_boundary and previous_sequence:
                             self._on_track_boundary('track_ended', previous_sequence)
@@ -810,16 +818,20 @@ class LiveListener:
                             prior = collector._sequence if collector.recording else None
                             collector.discard()
                             full_candidates.clear()
-                            if lyrics_sampler: lyrics_sampler.reset()
-                            if video_sampler: video_sampler.reset()
+                            if lyrics_sampler:
+                                lyrics_sampler.reset()
+                            if video_sampler:
+                                video_sampler.reset()
                             self._audio_boundary_detector.reset()
                             if prior and self._on_track_boundary:
                                 self._on_track_boundary('track_ended',prior)
                         if scene_kind == 'video':
                             video_sequence += 1
                         if self._on_scene_change:
-                            try:self._on_scene_change(scene)
-                            except Exception:pass
+                            try:
+                                self._on_scene_change(scene)
+                            except Exception:
+                                pass
                         previous_scene = scene_kind
                         previous_video_source_key = video_key
                         if scene_source_key:
@@ -828,8 +840,10 @@ class LiveListener:
                         # Refresh scene state on every window, not only on a
                         # class change: otherwise the panel and the AI keep a
                         # stale 'not_started' reason while the label arrives.
-                        try:self._on_scene_change(scene)
-                        except Exception:pass
+                        try:
+                            self._on_scene_change(scene)
+                        except Exception:
+                            pass
                     self._state_set(
                         scene_kind=scene_kind,
                         scene_reason=str(scene.get('reason','unknown'))[:150],
@@ -848,7 +862,8 @@ class LiveListener:
                                 try:
                                     self._on_video_preview(preview)
                                     self._state_set(video_previews_sent=self.status().get('video_previews_sent',0)+1)
-                                except Exception:pass
+                                except Exception:
+                                    pass
                         if scene_kind in {'mixed','ai_output'}:
                             self._state_set(scene_blocked_windows=self.status().get('scene_blocked_windows',0)+1)
                         # Preserve the capture heartbeat while excluding PCM.
@@ -876,7 +891,8 @@ class LiveListener:
                         prior=collector._sequence
                         collector.discard()
                         full_candidates.clear()
-                        if lyrics_sampler: lyrics_sampler.reset()
+                        if lyrics_sampler:
+                            lyrics_sampler.reset()
                         last_count=self.status().get('audio_track_change_candidates',0)
                         self._state_set(audio_track_change_candidates=last_count+1,
                                         last_audio_boundary_evidence=evidence)
@@ -888,8 +904,10 @@ class LiveListener:
                     source_full = getattr(source,'last_stereo',None)
                     full_rate = int(getattr(source,'capture_rate',CAPTURE_RATE))
                     if not collector.recording:
-                        if result.music: full_candidates.append(source_full)
-                        else: full_candidates.clear()
+                        if result.music:
+                            full_candidates.append(source_full)
+                        else:
+                            full_candidates.clear()
                     clip = collector.feed(wave, result.music, full_band=source_full,
                                           full_band_rate=full_rate)
                     if lyrics_sampler:
@@ -979,7 +997,8 @@ class LiveListener:
                 except Exception:
                     pass
             self._source = None
-            if lyrics_sampler: lyrics_sampler.reset()
+            if lyrics_sampler:
+                lyrics_sampler.reset()
             collector.discard()  # no incomplete audio on disk or sent to the AI
             if self._stop.is_set():
                 self._state_set(status="stopped", capturing_music=False, playback_paused=False)

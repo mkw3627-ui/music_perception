@@ -4,8 +4,10 @@ Video speech continues through lyrics_backend.py / the original Whisper worker.
 No model downloads are permitted inside this worker.
 """
 from __future__ import annotations
-from pathlib import Path
+
+import importlib
 import re
+from pathlib import Path
 
 from .singing_catalog import MODEL_BY_ID, verified_folder
 
@@ -14,20 +16,20 @@ LANGUAGE_NAMES={'zh':'Chinese','ja':'Japanese','en':'English'}
 
 def _open_model(model_name, model_dir, device_policy, cpu_threads, stage_hook=None,
                 placement='standard',gpu_budget_mib=0,cpu_budget_mib=0):
-    import numpy as np
     info=MODEL_BY_ID[model_name]
     root=Path(model_dir)
     local=verified_folder(root,info['quality'],deep=True)
     if local is None:
         raise RuntimeError('专业歌声模型未通过本地SHA-256校验；请先在模型页点击安装')
-    if stage_hook:stage_hook('verified_singing_model')
+    if stage_hook:
+        stage_hook('verified_singing_model')
     if info['engine']=='faster_whisper':
         # In Windows, CTranslate2 CUDA DLLs must come from v0.9.5's
         # SHA-verified plugin-private runtime, never an arbitrary global PATH.
         if device_policy in {'cuda','auto'}:
             import os
             if os.name=='nt':
-                from .stem_cuda_bundle import cuda_runtime_path, configure_private_cuda
+                from .stem_cuda_bundle import configure_private_cuda, cuda_runtime_path
                 # model_dir is <plugin-data>/models/singing_specialist
                 private_environment=Path(model_dir).parent.parent/'environment'
                 private_cuda=cuda_runtime_path(private_environment)
@@ -38,23 +40,26 @@ def _open_model(model_name, model_dir, device_policy, cpu_threads, stage_hook=No
         from faster_whisper import WhisperModel
         if device_policy in {'cuda','auto'}:
             try:
-                if stage_hook:stage_hook('loading_cuda')
+                if stage_hook:
+                    stage_hook('loading_cuda')
                 obj=WhisperModel(str(local),device='cuda',compute_type='float16',
                                  num_workers=1,local_files_only=True)
                 return obj,'cuda'
             except (RuntimeError,OSError,ImportError,ValueError):
                 if device_policy=='cuda':
                     raise RuntimeError('专业歌词模型 CUDA 初始化失败；未悄悄宣称 GPU 已运行')
-        if stage_hook:stage_hook('loading_cpu')
+        if stage_hook:
+            stage_hook('loading_cpu')
         return WhisperModel(str(local),device='cpu',compute_type='int8',
                             cpu_threads=cpu_threads,num_workers=1,local_files_only=True),'cpu'
-    from qwen_asr import Qwen3ASRModel
     import torch
+    from qwen_asr import Qwen3ASRModel
     if device_policy=='cuda' and not torch.cuda.is_available():
         raise RuntimeError('当前专业歌词独立环境的 PyTorch CUDA 不可用；检查显卡驱动及 CUDA 版本')
     use_gpu=device_policy!='cpu' and torch.cuda.is_available()
     device='cuda' if use_gpu else 'cpu'
-    if stage_hook:stage_hook('loading_'+device)
+    if stage_hook:
+        stage_hook('loading_'+device)
     # Official transformer backend API; model path is local, not an HF repo ID.
     kwargs={'dtype':torch.float16 if use_gpu else torch.float32,
             'device_map':'cuda:0' if use_gpu else 'cpu',
@@ -65,11 +70,13 @@ def _open_model(model_name, model_dir, device_policy, cpu_threads, stage_hook=No
         # Qwen3-ASR forwards these arguments to Transformers.from_pretrained.
         # Accelerate may execute CPU-assigned layers on CPU, but GPU-resident
         # layers stay CUDA. This does NOT force Windows shared GPU memory.
-        import accelerate  # noqa: F401; fail clearly if private env lacks it
+        # fail clearly if private env lacks accelerate
+        importlib.import_module('accelerate')
         kwargs['device_map']='auto'
         kwargs['max_memory']={0:f'{gpu_budget_mib}MiB',
                               'cpu':f'{cpu_budget_mib}MiB'}
-        if stage_hook:stage_hook('loading_experimental_gpu_ram_layers')
+        if stage_hook:
+            stage_hook('loading_experimental_gpu_ram_layers')
     obj=Qwen3ASRModel.from_pretrained(str(local),**kwargs)
     if placement=='gpu_ram_weights':
         underlying=getattr(obj,'model',None)
@@ -93,7 +100,8 @@ def prepare_singing_model(*,model_dir,model_name,model_cache,
     else:
         obj,device=_open_model(model_name,model_dir,device_policy,cpu_threads,stage_hook,
                                placement,gpu_budget_mib,cpu_budget_mib)
-    if stage_hook:stage_hook('singing_preflight')
+    if stage_hook:
+        stage_hook('singing_preflight')
     audio=np.zeros(16000,dtype=np.float32)
     info=MODEL_BY_ID[model_name]
     if info['engine']=='faster_whisper':
@@ -114,11 +122,13 @@ def prepare_singing_model(*,model_dir,model_name,model_cache,
 def _timed_qwen_lines(text, seconds, language):
     """Coarse *estimated* phrase positions (NOT forced alignment)."""
     text=' '.join(str(text).split()).strip()
-    if not text:return []
+    if not text:
+        return []
     # Bound private AI payloads even if the model hallucinates a long response.
     text=text[:1200]
     phrases=[s.strip() for s in re.split(r'(?<=[。！？!?；;\n])\s*',text) if s.strip()]
-    if not phrases: phrases=[text]
+    if not phrases:
+        phrases=[text]
     # Never create fake lines at arbitrary character counts. Qwen's plain
     # transcript lacks measured phoneme boundaries: keep an unpunctuated
     # passage as one provisional cue instead of inventing per-65-char times.
@@ -128,7 +138,8 @@ def _timed_qwen_lines(text, seconds, language):
     pos=0.0
     out=[]
     for p,n in zip(phrases,lengths):
-        start=pos; pos += seconds*n/total
+        start=pos
+        pos += seconds*n/total
         out.append({'at_s':round(start,3),'end_s':round(min(seconds,pos),3),
                     'text_preview':p[:160], 'words':[],
                     'language_candidate':language,'provenance':'local_qwen3_singing_asr',
@@ -159,14 +170,17 @@ def transcribe_singing_candidate(pcm,*,model_dir,model_name,model_cache=None,
     else:
         obj,device=_open_model(model_name,model_dir,device_policy,cpu_threads,stage_hook,
                                placement,gpu_budget_mib,cpu_budget_mib)
-        cache.clear();cache.update(key=key,instance=obj,device=device)
-    if stage_hook:stage_hook('singing_decoding')
+        cache.clear()
+        cache.update(key=key,instance=obj,device=device)
+    if stage_hook:
+        stage_hook('singing_decoding')
     spec=MODEL_BY_ID[model_name]
     if spec['engine']=='qwen_asr':
         lang=LANGUAGE_NAMES.get(language_hint)
         output=obj.transcribe(audio=(audio,16000),language=lang)
         if not output:
-            text=''; detected=language_hint
+            text=''
+            detected=language_hint
         else:
             text=str(getattr(output[0],'text','') or '')
             detected=str(getattr(output[0],'language','unknown'))
@@ -181,7 +195,8 @@ def transcribe_singing_candidate(pcm,*,model_dir,model_name,model_cache=None,
         detected=getattr(info,'language',language_hint)
         for piece in list(chunks)[:100]:
             text=str(getattr(piece,'text','') or '').strip()
-            start=float(getattr(piece,'start',0));end=float(getattr(piece,'end',start))
+            start=float(getattr(piece,'start',0))
+            end=float(getattr(piece,'end',start))
             if text and end>start and len(text)<180:
                 cues.append({'at_s':round(start,3),'end_s':round(end,3),
                              'text_preview':text,'words':[],

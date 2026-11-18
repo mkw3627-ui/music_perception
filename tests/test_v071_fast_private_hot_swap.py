@@ -8,19 +8,17 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import numpy as np
-from music_perception.auto_listener import (RapidLyricsSampler, FinishedClip,
-                                             SAMPLE_RATE)
-from music_perception.lyrics_backend import prepare_singing_model
-from music_perception.lyrics_bridge import PersistentLyricsSession, LyricsWorkerError
-from music_perception.lyrics_model_store import MODELS
-from music_perception.song_memory import QUALITY_MODEL
-from test_plugin import plugin_fixture
-
 
 # Since v0.8.2 all model switches REQUIRE verified local weights. These
 # older hot-swap unit tests intentionally simulate already-validated files:
 # they exercise post-verification lifecycle, not SHA/download integrity.
 import pytest
+from music_perception.auto_listener import SAMPLE_RATE, FinishedClip, RapidLyricsSampler
+from music_perception.lyrics_backend import prepare_singing_model
+from music_perception.lyrics_bridge import LyricsWorkerError, PersistentLyricsSession
+from music_perception.lyrics_model_store import MODELS
+from music_perception.song_memory import QUALITY_MODEL
+
 
 @pytest.fixture(autouse=True)
 def _preverified_test_model_for_legacy_swap(request, monkeypatch):
@@ -49,7 +47,8 @@ def test_preview_comes_after_six_seconds_while_dsp_uses_ten():
     assert first.end_reason=='early_lyrics_preview'
     assert first.sequence==8 and len(first.samples)==6*SAMPLE_RATE
     assert first.offset_s==0 and first.part_index==1
-    for _ in range(4):assert sampler.feed(8,[wave(2)]) is None
+    for _ in range(4):
+        assert sampler.feed(8,[wave(2)]) is None
     second=sampler.feed(8,[wave(2)])
     assert second.offset_s==6.0 and len(second.samples)==10*SAMPLE_RATE
     assert second.sequence==8 and second.part_index==2
@@ -94,7 +93,8 @@ def test_standby_warmup_uses_synthetic_audio_and_keeps_weights(tmp_path):
             calls.append(len(samples))
             return [],SimpleNamespace(language='en')
     from music_perception import lyrics_backend
-    def factory(*args, **kwargs):return FakeModel(),'cpu'
+    def factory(*args, **kwargs):
+        return FakeModel(),'cpu'
     cache={}
     with patch.object(lyrics_backend,'_make_model',factory):
         first=prepare_singing_model(model_dir=tmp_path,model_name='base',
@@ -124,21 +124,25 @@ while True:
 
 
 def test_preflight_session_process_reused_for_real_lyrics(tmp_path):
-    vendor=tmp_path/'vendor';vendor.mkdir()
-    worker=tmp_path/'fake.py';_make_prepare_worker(worker)
+    vendor=tmp_path/'vendor'
+    vendor.mkdir()
+    worker=tmp_path/'fake.py'
+    _make_prepare_worker(worker)
     session=PersistentLyricsSession(python_exe=sys.executable,vendor=vendor,
                 worker_script=worker,model_dir=tmp_path/'models',device='cpu',timeout=4)
     try:
         assert session.prepare()['device']=='cpu'
         assert session.transcribe(wave(2))['status']=='asr_hypothesis'
         assert session.running
-    finally:session.close()
+    finally:
+        session.close()
 
 
 def _await_status(plugin,status,timeout=4):
     end=time.monotonic()+timeout
     while time.monotonic()<end:
-        if plugin._lyrics_switch_state.get('status')==status:return
+        if plugin._lyrics_switch_state.get('status')==status:
+            return
         time.sleep(.03)
     raise AssertionError(f'Not {status}: {plugin._lyrics_switch_state}')
 
@@ -147,22 +151,29 @@ def test_hot_swap_only_commits_after_new_model_ready(plugin_fixture,monkeypatch)
     plugin,_,_,_=plugin_fixture
     async def run():
         await plugin.startup()
-        plugin._auto_consented=True;plugin._ai_delivery=True
+        plugin._auto_consented=True
+        plugin._ai_delivery=True
         plugin._lyrics_profile='medium'
         plugin._lyrics_device_preference='cpu'
         plugin._environment.worker_runtime=lambda:(sys.executable,plugin.data_path('environment'))
         plugin._live_session_config={'lyrics_model':'base','lyrics_device':'cpu'}
-        release=[];ready=[]
+        release=[]
+        ready=[]
         class Session:
             def __init__(self,**kwargs):
-                self.name=kwargs['model_name'];self.device=kwargs['device'];ready.append(self.name)
+                self.name=kwargs['model_name']
+                self.device=kwargs['device']
+                ready.append(self.name)
             def prepare(self):
                 time.sleep(.05)
                 return {'ready':True,'device':self.device}
-            def close(self):release.append(self.name)
+            def close(self):
+                release.append(self.name)
         class Current:
-            def close(self):release.append('old')
-        old=Current();plugin._lyrics_session=old
+            def close(self):
+                release.append('old')
+        old=Current()
+        plugin._lyrics_session=old
         module=sys.modules[plugin.__class__.__module__]
         monkeypatch.setattr(module,'PersistentLyricsSession',Session)
         pending=(await plugin.set_lyrics_quality('ultra')).value
@@ -184,18 +195,26 @@ def test_failed_cuda_warmup_keeps_cpu_model_and_saved_preference(plugin_fixture,
     plugin,_,_,_=plugin_fixture
     async def run():
         await plugin.startup()
-        plugin._auto_consented=True;plugin._ai_delivery=True
-        plugin._lyrics_profile='medium';plugin._lyrics_device_preference='cpu'
+        plugin._auto_consented=True
+        plugin._ai_delivery=True
+        plugin._lyrics_profile='medium'
+        plugin._lyrics_device_preference='cpu'
         plugin._environment.worker_runtime=lambda:(sys.executable,plugin.data_path('environment'))
         plugin._live_session_config={'lyrics_model':'base','lyrics_device':'cpu'}
         class Current:
-            def __init__(self):self.closed=False
-            def close(self):self.closed=True
-        old=Current();plugin._lyrics_session=old
+            def __init__(self):
+                self.closed=False
+            def close(self):
+                self.closed=True
+        old=Current()
+        plugin._lyrics_session=old
         class BadGPU:
-            def __init__(self,**kw):pass
-            def prepare(self):raise LyricsWorkerError('CUDA DLL unavailable')
-            def close(self):pass
+            def __init__(self,**kw):
+                pass
+            def prepare(self):
+                raise LyricsWorkerError('CUDA DLL unavailable')
+            def close(self):
+                pass
         module=sys.modules[plugin.__class__.__module__]
         monkeypatch.setattr(module,'PersistentLyricsSession',BadGPU)
         pending=(await plugin.set_lyrics_device('cuda')).value
@@ -210,14 +229,19 @@ def test_failed_cuda_warmup_keeps_cpu_model_and_saved_preference(plugin_fixture,
 
 
 def test_rapid_path_does_not_delay_rhythm_or_accept_speech():
-    from music_perception.auto_listener import LiveListener, Decision
     import threading
-    previews=[];rhythm=[];ends=[]
+
+    from music_perception.auto_listener import Decision, LiveListener
+    previews=[]
+    rhythm=[]
+    ends=[]
     stop=threading.Event()
     class FakeSource:
         device='test-loopback-speaker'
-        def __enter__(self):return self
-        def __exit__(self,*args):return False
+        def __enter__(self):
+            return self
+        def __exit__(self,*args):
+            return False
         def read(self):
             if getattr(self,'index',0)>=5:
                 stop.set()
@@ -225,8 +249,10 @@ def test_rapid_path_does_not_delay_rhythm_or_accept_speech():
             self.index=getattr(self,'index',0)+1
             return wave(2)
     class FakeGate:
-        def __init__(self,*args,**kwargs):pass
-        def classify(self,frame):return Decision(True,.92,.01)
+        def __init__(self,*args,**kwargs):
+            pass
+        def classify(self,frame):
+            return Decision(True,.92,.01)
     listener=LiveListener(model_file=Path('unused'),max_seconds=120,
             threshold=.25,on_clip=rhythm.append,
             source_factory=FakeSource,gate_factory=FakeGate,
@@ -248,21 +274,28 @@ def test_user_can_cancel_long_model_warmup_without_changing_preferences(plugin_f
     import threading
     async def run():
         await plugin.startup()
-        plugin._auto_consented=True;plugin._ai_delivery=True
-        plugin._lyrics_profile='medium';plugin._lyrics_device_preference='cpu'
+        plugin._auto_consented=True
+        plugin._ai_delivery=True
+        plugin._lyrics_profile='medium'
+        plugin._lyrics_device_preference='cpu'
         plugin._environment.worker_runtime=lambda:(sys.executable,plugin.data_path('environment'))
         plugin._live_session_config={'lyrics_model':'base','lyrics_device':'cpu'}
-        reached=threading.Event();cancelled=threading.Event()
+        reached=threading.Event()
+        cancelled=threading.Event()
         class Old:
-            def close(self):pass
-        old=Old();plugin._lyrics_session=old
+            def close(self):
+                pass
+        old=Old()
+        plugin._lyrics_session=old
         class Slow:
-            def __init__(self,**kw):pass
+            def __init__(self,**kw):
+                pass
             def prepare(self):
                 reached.set()
                 assert cancelled.wait(3)
                 raise LyricsWorkerError('cancelled by user')
-            def close(self):cancelled.set()
+            def close(self):
+                cancelled.set()
         module=sys.modules[plugin.__class__.__module__]
         monkeypatch.setattr(module,'PersistentLyricsSession',Slow)
         start=(await plugin.set_lyrics_quality('ultra')).value
@@ -282,7 +315,8 @@ def test_private_message_is_sensor_evidence_not_a_request_to_speak(plugin_fixtur
     from music_perception.auto_listener import FinishedClip
     async def run():
         await plugin.startup()
-        plugin._auto_consented=True;plugin._ai_delivery=True
+        plugin._auto_consented=True
+        plugin._ai_delivery=True
         clip=FinishedClip(wave(2),'live_progress',1,sequence=1)
         context={'music_capture':{'music_sequence':1},
                  'musical_event_timeline':{'events':[{'at_s':1.2,'type':'beat_candidate'}]}}
@@ -301,21 +335,29 @@ def test_windows_locked_settings_file_prevents_switch_and_keeps_old_model(plugin
     plugin,_,_,_=plugin_fixture
     async def run():
         await plugin.startup()
-        plugin._auto_consented=True;plugin._ai_delivery=True
-        plugin._lyrics_profile='medium';plugin._lyrics_device_preference='cpu'
+        plugin._auto_consented=True
+        plugin._ai_delivery=True
+        plugin._lyrics_profile='medium'
+        plugin._lyrics_device_preference='cpu'
         plugin._environment.worker_runtime=lambda:(sys.executable,plugin.data_path('environment'))
         plugin._live_session_config={'lyrics_model':'base','lyrics_device':'cpu'}
         class Old:
             closed=False
-            def close(self):self.closed=True
-        old=Old();plugin._lyrics_session=old
+            def close(self):
+                self.closed=True
+        old=Old()
+        plugin._lyrics_session=old
         class New:
-            def __init__(self,**kw):pass
-            def prepare(self):return {'ready':True,'device':'cpu'}
-            def close(self):pass
+            def __init__(self,**kw):
+                pass
+            def prepare(self):
+                return {'ready':True,'device':'cpu'}
+            def close(self):
+                pass
         module=sys.modules[plugin.__class__.__module__]
         monkeypatch.setattr(module,'PersistentLyricsSession',New)
-        def cannot_save():raise PermissionError('[WinError 5] access denied')
+        def cannot_save():
+            raise PermissionError('[WinError 5] access denied')
         plugin._save_preferences=cannot_save
         msg=(await plugin.set_lyrics_quality('ultra')).value
         assert msg['switch_status']=='preparing'
@@ -377,14 +419,19 @@ def test_profile_hot_switch_preference_write_failure_rolls_back(plugin_fixture, 
         plugin._live_session_config = {'lyrics_model': 'base', 'lyrics_device': 'cpu'}
         plugin._environment.worker_runtime = lambda: (sys.executable, plugin.data_path('environment'))
         class Old:
-            def __init__(self):self.closed=False
-            def close(self):self.closed=True
+            def __init__(self):
+                self.closed=False
+            def close(self):
+                self.closed=True
         old=Old()
         plugin._lyrics_session=old
         class New:
-            def __init__(self, **kw): self.closed=False
-            def prepare(self):return {'ready':True,'device':'cpu'}
-            def close(self): self.closed=True
+            def __init__(self, **kw):
+                self.closed=False
+            def prepare(self):
+                return {'ready':True,'device':'cpu'}
+            def close(self):
+                self.closed=True
         module=sys.modules[plugin.__class__.__module__]
         monkeypatch.setattr(module,'PersistentLyricsSession',New)
         monkeypatch.setattr(plugin,'_save_preferences',lambda:(_ for _ in ()).throw(PermissionError('locked')))

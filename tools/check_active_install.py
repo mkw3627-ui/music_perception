@@ -4,10 +4,11 @@ Usage (Windows): python tools/check_active_install.py "D:\\...\\plugins\\music_p
 Does not use N.E.K.O SDK, download models, access audio, or change files.
 """
 from __future__ import annotations
+
 import argparse
-from pathlib import Path
 import sys
 import tomllib
+from pathlib import Path
 
 EXPECTED_VERSION = '0.8.4'
 EXPECTED_PROTOCOL = '0.8.4-native-r1'

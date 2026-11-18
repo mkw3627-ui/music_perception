@@ -8,14 +8,13 @@ from __future__ import annotations
 import io
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
 import sysconfig
+from pathlib import Path
 
 import numpy as np
 import pytest
-
 from music_perception import analysis_worker
 
 ROOT = Path(__file__).resolve().parents[1]

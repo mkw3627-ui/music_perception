@@ -3,9 +3,6 @@ import asyncio
 import json
 import subprocess
 import sys
-from pathlib import Path
-
-from test_plugin import plugin_fixture
 
 
 def test_pause_plugin_closes_asr_process_but_retains_consent_memory(plugin_fixture):
@@ -109,7 +106,9 @@ def test_pause_kills_plugin_owned_child_processes(plugin_fixture):
             assert report['ok'] and report['release_status']=='subprocess_exit_confirmed'
             assert child.poll() is not None
         finally:
-            if child.poll() is None: child.kill();child.wait(timeout=2)
+            if child.poll() is None:
+                child.kill()
+                child.wait(timeout=2)
         await plugin.shutdown()
     asyncio.run(run())
 

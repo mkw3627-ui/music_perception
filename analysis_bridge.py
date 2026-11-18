@@ -6,12 +6,12 @@ samples, transcript text, or the worker's stdout (which contains music data).
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Callable
 
 
@@ -43,9 +43,9 @@ def _append_diagnostic(path: str | Path | None, detail: str) -> None:
 def _worker_failure(returncode: int, err: bytes, out_bytes: int) -> str:
     """Keep stage breadcrumbs separate from the worker's actual exception."""
     lines = err.decode('utf-8', errors='replace').splitlines()
-    stages = [l.partition(':')[2].strip() for l in lines
-              if l.startswith('ANALYSIS_STAGE:')]
-    real_errors = [l for l in lines if not l.startswith('ANALYSIS_STAGE:')]
+    stages = [line.partition(':')[2].strip() for line in lines
+              if line.startswith('ANALYSIS_STAGE:')]
+    real_errors = [line for line in lines if not line.startswith('ANALYSIS_STAGE:')]
     stage = stages[-1] if stages else 'python_entry_not_reached'
     unsigned = returncode & 0xffffffff
     error_text = '\n'.join(real_errors).strip()[-850:]

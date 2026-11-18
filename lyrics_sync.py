@@ -5,6 +5,7 @@ aligned to the user's Windows player. Song metadata and capture timing have
 to be correctly anchored before using LRC against live loopback audio.
 """
 from __future__ import annotations
+
 import re
 from pathlib import Path
 
@@ -31,7 +32,8 @@ def parse_lrc(text: str, *, max_lines: int = 1000) -> list[dict]:
         if not content or len(content) > 500:
             continue
         for tag in tags:
-            mm = int(tag.group(1)); sec = int(tag.group(2))
+            mm = int(tag.group(1))
+            sec = int(tag.group(2))
             if sec >= 60:
                 continue
             frac = tag.group(3) or '0'

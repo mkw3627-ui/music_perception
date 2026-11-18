@@ -5,14 +5,11 @@ These are offline safety/contract tests; NOT proof of real Windows WASAPI.
 from __future__ import annotations
 
 import asyncio
-import json
 import time
 from pathlib import Path
 
-from music_perception import MusicPerceptionPlugin
 from music_perception.audio_dispatch import PrivateAudioBus, SourceLabels, source_id
 from music_perception.auto_listener import Decision
-from test_plugin import plugin_fixture
 
 
 def src(pid=501,*,ai=False,name='vlc.exe'):
@@ -45,8 +42,10 @@ def test_private_bus_sends_once_on_change_and_retries_host_rejection():
 def test_private_bus_block_large_content_and_risky_topic():
     bus=PrivateAudioBus(lambda **kw: None)
     import pytest
-    with pytest.raises(ValueError):bus.publish('../bad',{'small':True})
-    with pytest.raises(ValueError):bus.publish('music',{'lyrics':'x'*49000})
+    with pytest.raises(ValueError):
+        bus.publish('../bad',{'small':True})
+    with pytest.raises(ValueError):
+        bus.publish('music',{'lyrics':'x'*49000})
 
 
 def test_external_label_review_does_not_claim_native_video_capture():
@@ -142,7 +141,8 @@ def test_private_ai_source_listing_and_audio_panel_have_no_side_effects(plugin_f
     async def run():
         await plugin.startup()
         plugin._app_catalog_cache=[src()]
-        plugin._auto_consented=True;plugin._ai_delivery=True
+        plugin._auto_consented=True
+        plugin._ai_delivery=True
         one=(await plugin.get_current_audio_sources_for_ai()).value
         assert one['available'] and len(one['channels'])==1
         assert one['channels'][0]['tag_status']=='candidate' or one['channels'][0].get('tag_status')=='candidate'
@@ -178,7 +178,8 @@ def test_distinct_song_boundaries_notify_separately_but_identical_one_is_deduped
     messages=[]
     async def run():
         await plugin.startup()
-        plugin._auto_consented=True;plugin._ai_delivery=True
+        plugin._auto_consented=True
+        plugin._ai_delivery=True
         plugin.push_message=lambda **kw: messages.append(kw) or {'submitted':True}
         plugin._invalidate_pending_ai_music('track_ended',old_song_id='play:A',boundary_sequence=5)
         plugin._invalidate_pending_ai_music('track_ended',old_song_id='play:A',boundary_sequence=5)

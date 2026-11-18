@@ -1,14 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-import json
-from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 import soundfile as sf
-import numpy as np
-
 from music_perception import MusicPerceptionPlugin
 from plugin.sdk.plugin import Ok
 
@@ -32,8 +29,7 @@ class FakeLogger:
         pass
 
 
-@pytest.fixture
-def plugin_fixture(tmp_path):
+def make_plugin_fixture(tmp_path):
     music = tmp_path / "music"
     music.mkdir()
     other = tmp_path / "other"

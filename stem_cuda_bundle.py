@@ -11,10 +11,8 @@ staged and atomically activated; interrupted downloads retain .partial bytes.
 """
 from __future__ import annotations
 
-from html.parser import HTMLParser
 import json
 import os
-from pathlib import Path
 import platform
 import shutil
 import sys
@@ -23,6 +21,8 @@ import urllib.parse
 import urllib.request
 import uuid
 import zipfile
+from html.parser import HTMLParser
+from pathlib import Path
 
 CUDA_BUNDLE_VERSION = 'cuda12.9-cudnn9.22-win64-r1'
 CUDA_MARKER = '.neko-private-cuda-verified.json'
@@ -219,11 +219,11 @@ def install_cuda_runtime(environment_dir, status_path, priority='mirror'):
     if cuda_runtime_path(environment_dir) is not None:
         return True
     try:
+        from .lyrics_model_store import _file_sha256, _stream_to_file
         from .stem_gpu_runtime import _status
-        from .lyrics_model_store import _stream_to_file, _file_sha256
     except ImportError:
+        from lyrics_model_store import _file_sha256, _stream_to_file
         from stem_gpu_runtime import _status
-        from lyrics_model_store import _stream_to_file, _file_sha256
     destination = _folder(environment_dir)
     if destination.exists() and cuda_runtime_path(environment_dir) is None:
         # No overwriting a live (or locked) DLL directory. Park stale runtime.

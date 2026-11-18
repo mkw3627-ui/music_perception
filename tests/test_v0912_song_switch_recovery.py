@@ -9,11 +9,7 @@ import threading
 import time
 
 import numpy as np
-
-from music_perception import MusicPerceptionPlugin
-from music_perception.auto_listener import (LiveListener, FinishedClip,
-                                             Decision, SAMPLE_RATE)
-from test_plugin import plugin_fixture
+from music_perception.auto_listener import SAMPLE_RATE, Decision, FinishedClip, LiveListener
 
 
 def test_capture_error_reopens_same_source_and_new_sequence(tmp_path):
@@ -36,8 +32,10 @@ def test_capture_error_reopens_same_source_and_new_sequence(tmp_path):
                 self.listener._stop.set()
             return np.full(2*SAMPLE_RATE,.08,np.float32)
     class Gate:
-        def __init__(self,*a,**k): pass
-        def classify(self,pcm): return Decision(True,.95,.04)
+        def __init__(self,*a,**k):
+            pass
+        def classify(self,pcm):
+            return Decision(True,.95,.04)
     def source_factory():
         source = Source(listener,len(uses)+1)
         uses.append(source)
@@ -56,7 +54,8 @@ def test_capture_error_reopens_same_source_and_new_sequence(tmp_path):
 
 def test_skip_interrupts_only_inflight_old_singing_child(plugin_fixture):
     p, *_ = plugin_fixture
-    async def start(): await p.startup()
+    async def start():
+        await p.startup()
     asyncio.run(start())
     p._auto_consented = True
     p._listener_session = 3
@@ -67,7 +66,8 @@ def test_skip_interrupts_only_inflight_old_singing_child(plugin_fixture):
     p._lyrics_progress_by_song = {'song-old':{'state':'transcribing'}}
     calls=[]
     class OldModel:
-        def close(self): calls.append('closed_stale')
+        def close(self):
+            calls.append('closed_stale')
     old=OldModel()
     p._singing_session=old
     p._on_track_boundary('track_ended',7)
@@ -102,7 +102,8 @@ def test_track_change_during_stems_does_not_load_singing_model(plugin_fixture):
     p._transcribe_singing_live_audio_isolated=lambda *a,**k:calls.append('BAD')
     clip=FinishedClip(np.full(6*SAMPLE_RATE,.08,np.float32),
                       'early_lyrics_preview',3,offset_s=0,sequence=3,part_index=1)
-    q=queue.Queue();q.put('work')
+    q=queue.Queue()
+    q.put('work')
     p._process_one_lyrics_task(clip,{'music_capture':{}},4,4,q,
                                quality_generation=p._lyrics_quality_generation)
     assert calls==[]
@@ -120,7 +121,8 @@ def test_dead_asr_consumer_restart_is_bounded_and_lazy(plugin_fixture):
     p._lyrics_queue=queue.Queue(maxsize=2)
     p._lyrics_queue.put(('obsolete',))
     class Dead:
-        def is_alive(self):return False
+        def is_alive(self):
+            return False
     p._lyrics_worker_thread=Dead()
     seen=[]
     def consumer(session,q,stop):

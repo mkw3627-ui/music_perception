@@ -4,14 +4,15 @@ No model network access / no weights. Exercise the REAL worker subprocess
 with a tiny fake singing_catalog, rather than monkeypatching its source.
 """
 from __future__ import annotations
+
 import json
-from pathlib import Path
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
-from music_perception.singing_install import SingingInstallError, _launch
 import pytest
+from music_perception.singing_install import SingingInstallError, _launch
 
 ROOT = Path(__file__).parents[1]
 

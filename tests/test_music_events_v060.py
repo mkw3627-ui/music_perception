@@ -1,11 +1,17 @@
 """Timing and consent-safe semantics tests, no remote models or copyrighted audio."""
 from __future__ import annotations
+
 import json
+
 import numpy as np
+from music_perception.lyrics_sync import load_adjacent_lrc, parse_lrc
 from music_perception.music_events import (
-    timed_music_events, offset_event_timeline, compact_music_context,
-    predict_beat_this, enrich_with_user_lrc)
-from music_perception.lyrics_sync import parse_lrc, load_adjacent_lrc
+    compact_music_context,
+    enrich_with_user_lrc,
+    offset_event_timeline,
+    predict_beat_this,
+    timed_music_events,
+)
 
 
 def _mock_report():
@@ -29,7 +35,8 @@ def test_beat_timestamp_and_no_made_up_downbeat():
 
 
 def test_beat_this_mock_returns_downbeat_only_if_trained_checkpoint_exists(tmp_path):
-    ckpt=tmp_path/'beat_this.ckpt';ckpt.write_bytes(b'stub')
+    ckpt=tmp_path/'beat_this.ckpt'
+    ckpt.write_bytes(b'stub')
     observed=[]
     def fake_predictor(audio, sr):
         observed.append((len(audio),sr))
@@ -73,8 +80,10 @@ def test_lrc_parser_offsets_multitags_and_local_authorization(tmp_path):
     raw='''[ar:Someone]\n[offset:+100]\n[00:01.23][00:03.450]first line\n[00:04.2]second line\n[00:90.4]invalid\n'''
     lyrics=parse_lrc(raw)
     assert [x['at_s'] for x in lyrics]==[1.33,3.55,4.3]
-    music=tmp_path/'allowed';music.mkdir()
-    song=music/'song.wav';song.write_bytes(b'synthetic')
+    music=tmp_path/'allowed'
+    music.mkdir()
+    song=music/'song.wav'
+    song.write_bytes(b'synthetic')
     song.with_suffix('.lrc').write_text(raw,'utf-8')
     assert load_adjacent_lrc(song,allowed_roots=[music])==lyrics
     import pytest
@@ -118,7 +127,8 @@ def test_compact_long_track_keeps_end_not_just_first_36_beats():
 
 
 def test_optional_beat_this_predictions_are_normal_beats_then_downbeats(tmp_path):
-    ckpt = tmp_path/'trained.ckpt'; ckpt.write_bytes(b'only used by mock')
+    ckpt = tmp_path/'trained.ckpt'
+    ckpt.write_bytes(b'only used by mock')
     # The actual CPJKU Postprocessor returns (beats, downbeats), not swapped.
     def fake_prediction(audio, sr):
         return np.array([.25,.75,1.25,1.75]), np.array([.25,1.75])

@@ -1,7 +1,6 @@
 """Regression checks using synthetic sounds, no copyrighted music or network."""
 from __future__ import annotations
 
-import importlib.util
 import json
 import shutil
 import subprocess
@@ -12,7 +11,6 @@ from pathlib import Path
 import numpy as np
 import pytest
 import soundfile as sf
-
 from music_perception import engine  # now imports shared, package-relative time-event helpers
 
 
@@ -76,11 +74,14 @@ def test_sad_classifier_uses_correct_label_index(monkeypatch, tmp_path):
         (tmp_path / name).write_bytes(b"dummy")
 
     class FakeEmbedding:
-        def __init__(self, **kw): pass
-        def __call__(self, wave): return np.zeros((3, 128), np.float32)
+        def __init__(self, **kw):
+            pass
+        def __call__(self, wave):
+            return np.zeros((3, 128), np.float32)
 
     class FakeHead:
-        def __init__(self, **kw): self.file = kw["graphFilename"]
+        def __init__(self, **kw):
+            self.file = kw["graphFilename"]
         def __call__(self, embeddings):
             if "mood_happy" in self.file:
                 return np.array([[0.1, 0.9], [0.12, 0.88], [0.1, .9]])
@@ -112,7 +113,7 @@ def test_brief_samples_entire_timeline():
 
 def test_chunked_stereo_48k_audio(tmp_path):
     """ResampleStream must preserve full song length and not drop the tail."""
-    from music_perception.engine import _decode, SAMPLE_RATE
+    from music_perception.engine import SAMPLE_RATE, _decode
     p = tmp_path / "stereo-48k.wav"
     sr, seconds = 48000, 4
     t = np.arange(sr * seconds, dtype=np.float64) / sr

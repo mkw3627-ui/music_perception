@@ -9,11 +9,8 @@ import asyncio
 from pathlib import Path
 
 import numpy as np
-
 from music_perception.auto_listener import FinishedClip
-from music_perception import MusicPerceptionPlugin
 from music_perception.lyrics_backend import transcribe_singing_candidate
-from test_plugin import plugin_fixture
 
 
 def run(coro):

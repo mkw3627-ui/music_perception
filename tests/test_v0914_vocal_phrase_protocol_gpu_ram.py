@@ -2,16 +2,14 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import sys
 import textwrap
+
 import numpy as np
 import pytest
-
 from music_perception.adaptive_resources import select_model
+from music_perception.lyrics_bridge import LyricsWorkerError, PersistentLyricsSession
 from music_perception.speech_timeline import build_music_lines, music_phrases
-from music_perception.lyrics_bridge import PersistentLyricsSession, LyricsWorkerError
-from test_plugin import plugin_fixture
 
 
 def test_song_sentence_not_split_by_beats_or_asr_chunks():
@@ -72,7 +70,8 @@ def test_verified_lower_gpu_tier_before_hybrid():
 
 
 def _fake_worker(tmp_path, script_body):
-    script=tmp_path/'worker.py';script.write_text(textwrap.dedent(script_body),encoding='utf-8')
+    script=tmp_path/'worker.py'
+    script.write_text(textwrap.dedent(script_body),encoding='utf-8')
     (tmp_path/'private_vendor').mkdir()
     (tmp_path/'model').mkdir()
     return PersistentLyricsSession(python_exe=sys.executable,vendor=tmp_path/'private_vendor',
@@ -97,7 +96,8 @@ def test_noise_stdout_is_ignored_until_json_reply(tmp_path):
     try:
         assert session.prepare()['device']=='cpu'
         assert session.transcribe(np.zeros(16000,np.float32))['device']=='cpu'
-    finally:session.close()
+    finally:
+        session.close()
 
 
 def test_worker_oversized_reply_returns_specific_reason(tmp_path):
@@ -109,13 +109,16 @@ def test_worker_oversized_reply_returns_specific_reason(tmp_path):
     try:
         with pytest.raises(LyricsWorkerError,match='1MiB'):
             session.prepare()
-    finally:session.close()
+    finally:
+        session.close()
 
 
 def test_placement_not_available_to_whisper_or_cpu(tmp_path):
     from music_perception.lyrics_bridge import PersistentLyricsSession
-    script=tmp_path/'worker.py';script.write_text('pass')
-    (tmp_path/'private_vendor').mkdir();(tmp_path/'model').mkdir()
+    script=tmp_path/'worker.py'
+    script.write_text('pass')
+    (tmp_path/'private_vendor').mkdir()
+    (tmp_path/'model').mkdir()
     for model,device in [('base','cuda'),('sing-qwen-1.7b','cpu')]:
         with pytest.raises(LyricsWorkerError,match='仅适用于'):
             PersistentLyricsSession(python_exe=sys.executable,vendor=tmp_path/'private_vendor',
@@ -201,8 +204,10 @@ sys.stdin.buffer.readline()
 print("torch.cuda.OutOfMemoryError: CUDA out of memory",file=sys.stderr,flush=True)
 sys.exit(14)
 ''',encoding='utf8')
-    vendor=tmp_path/'vendor';vendor.mkdir()
-    root=tmp_path/'model';root.mkdir()
+    vendor=tmp_path/'vendor'
+    vendor.mkdir()
+    root=tmp_path/'model'
+    root.mkdir()
     diag=tmp_path/'diagnostics.json'
     session=PersistentLyricsSession(python_exe=sys.executable,vendor=vendor,
             worker_script=worker,model_dir=root,model_name='base',device='cpu',
@@ -215,11 +220,13 @@ sys.exit(14)
         assert 'OutOfMemoryError' not in message  # never echo raw stack traces to UI
         log=diag.with_name('diagnostics_stderr.log')
         assert 'OutOfMemoryError' in log.read_text('utf8')
-    finally:session.close()
+    finally:
+        session.close()
 
 
 def test_qwen_weight_split_uses_transformers_gpu_and_cpu_budget(monkeypatch,tmp_path):
     import types
+
     import music_perception.singing_backend as backend
     inputs={}
     class FakeQwen:
@@ -241,6 +248,7 @@ def test_qwen_weight_split_uses_transformers_gpu_and_cpu_budget(monkeypatch,tmp_
 
 def test_qwen_weight_split_rejects_false_gpu_residency(monkeypatch,tmp_path):
     import types
+
     import music_perception.singing_backend as backend
     class FakeQwen:
         @classmethod

@@ -6,19 +6,14 @@ import the already-installed scientific stack from its own vendor directory.
 from __future__ import annotations
 
 import asyncio
-import importlib.util
-import math
-import os
-from pathlib import Path
 import sys
 import sysconfig
+from pathlib import Path
 
 import numpy as np
 import pytest
-
-from music_perception.analysis_bridge import analyze_pcm_isolated, AnalysisWorkerError
+from music_perception.analysis_bridge import AnalysisWorkerError, analyze_pcm_isolated
 from music_perception.runtime_environment import PROBE_SCRIPT
-from test_plugin import plugin_fixture
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -149,9 +144,12 @@ def test_auxiliary_failure_still_returns_primary_spectrum():
 def test_stop_terminates_active_private_analysis_process(plugin_fixture):
     plugin, *_ = plugin_fixture
     class FakeChild:
-        def __init__(self): self.terminated=False
-        def poll(self): return None
-        def terminate(self): self.terminated=True
+        def __init__(self):
+            self.terminated=False
+        def poll(self):
+            return None
+        def terminate(self):
+            self.terminated=True
     async def scenario():
         await plugin.startup()
         child=FakeChild()

@@ -1,5 +1,6 @@
 """Align ASR time estimates with beats while preserving their real timestamps."""
 from __future__ import annotations
+
 import bisect
 import copy
 import math
@@ -23,13 +24,15 @@ def align_lyrics_to_music(lyrics: dict, *, offset_s: float, beats: list[float],
         out['player_time_basis']='estimated_player_position_not_verified' 
     cues=[]
     for raw in out.get('timed_cues',[])[:20]:
-        if not isinstance(raw,dict): continue
+        if not isinstance(raw,dict):
+            continue
         item=copy.deepcopy(raw)
         for f in ('at_s','end_s'):
             if f in item:
                 item[f]=round(max(0.0, float(item[f])+anchor),3)
         for w in item.get('words',[])[:16]:
-            if 'at_s' in w: w['at_s']=round(float(w['at_s'])+anchor,3)
+            if 'at_s' in w:
+                w['at_s']=round(float(w['at_s'])+anchor,3)
         if media_time_anchor_s is not None:
             item['player_at_s_estimated']=round(max(0,float(raw.get('at_s',0))+float(media_time_anchor_s)),3)
         t=float(item.get('at_s',anchor))

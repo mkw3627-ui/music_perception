@@ -1,14 +1,11 @@
 """No-model active Windows session labels + fixed N.E.K.O AI audio exclusion."""
 from __future__ import annotations
+
 import asyncio
-import json
-import math
 from pathlib import Path
 
-from music_perception import app_channels
-from music_perception import MusicPerceptionPlugin
-from music_perception.windows_audio_sessions import active_session_rows,level_dbfs
-from test_plugin import plugin_fixture
+from music_perception import MusicPerceptionPlugin, app_channels
+from music_perception.windows_audio_sessions import active_session_rows, level_dbfs
 
 
 def test_session_peak_filters_silent_shared_and_invalid():

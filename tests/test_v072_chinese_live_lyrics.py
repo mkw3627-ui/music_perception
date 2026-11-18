@@ -1,14 +1,14 @@
 """New local lyric presentation: no network, no real songs or copyrighted data."""
 from __future__ import annotations
+
 import asyncio
-from types import SimpleNamespace
 from pathlib import Path
+from types import SimpleNamespace
+
 import numpy as np
-from music_perception import MusicPerceptionPlugin
 from music_perception.auto_listener import FinishedClip
-from music_perception.song_memory import RecentSongMemory
 from music_perception.lyrics_backend import transcribe_singing_candidate
-from test_plugin import plugin_fixture
+from music_perception.song_memory import RecentSongMemory
 
 
 def run(coroutine):
@@ -23,7 +23,8 @@ def test_multilingual_chinese_lock_is_sent_to_actual_asr_decoder():
             seg=SimpleNamespace(text='测试中文歌声',start=.2,end=2.1,
                 avg_logprob=-.2,no_speech_prob=.01,words=[])
             return [seg],SimpleNamespace(language='zh')
-    def factory(name,**kwargs):return FakeModel()
+    def factory(name,**kwargs):
+        return FakeModel()
     pcm=np.sin(np.arange(16000*6)*np.pi/60).astype(np.float32)*.05
     result=transcribe_singing_candidate(pcm,model_dir=Path('/tmp/unused-music-model'),
         model_factory=factory,device_policy='cpu',language_hint='zh')

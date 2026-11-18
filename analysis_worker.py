@@ -9,6 +9,7 @@ package stub so only the pure analyzer modules load in this child process.
 """
 from __future__ import annotations
 
+import importlib
 import json
 import pathlib
 import sys
@@ -71,13 +72,14 @@ def main() -> None:
         _stage('import_numpy')
         import numpy as np
         _stage('import_scipy')
-        import scipy.signal  # deliberate: catches partial scipy installations
-        import scipy.ndimage
+        # deliberate: catches partial scipy installations
+        importlib.import_module('scipy.signal')
+        importlib.import_module('scipy.ndimage')
         _stage('import_librosa')
-        import librosa
+        importlib.import_module('librosa')
         _stage('import_audio_engine')
-        from music_perception.spectral_context import spectrum_for_ai
         from music_perception.engine import analyze_waveform
+        from music_perception.spectral_context import spectrum_for_ai
     except Exception as exc:
         _fail(f'isolated import: {type(exc).__name__}: {exc}')
 

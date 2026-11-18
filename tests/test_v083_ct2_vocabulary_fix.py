@@ -7,10 +7,8 @@ from __future__ import annotations
 import hashlib
 import io
 import json
-from pathlib import Path
 
 import pytest
-
 from music_perception import lyrics_model_store as store
 
 
@@ -61,11 +59,16 @@ class FakeResponse:
         self.status = 200
         self.headers = {'Content-Length':str(len(payload)), 'Content-Type':content_type}
         self.stream = io.BytesIO(payload)
-    def __enter__(self):return self
-    def __exit__(self,*_):return False
-    def read(self,n):return self.stream.read(n)
-    def geturl(self):return 'https://hf-mirror.com/example'
-    def getcode(self):return self.status
+    def __enter__(self):
+        return self
+    def __exit__(self,*_):
+        return False
+    def read(self,n):
+        return self.stream.read(n)
+    def geturl(self):
+        return 'https://hf-mirror.com/example'
+    def getcode(self):
+        return self.status
 
 
 def test_mirror_html_error_cannot_overwrite_existing_sidecar(tmp_path,monkeypatch):

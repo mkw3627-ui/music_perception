@@ -13,12 +13,10 @@ This fallback runtime feature store is not claimed to be a host-managed vendor.
 """
 from __future__ import annotations
 
-import importlib
 import hashlib
+import importlib
 import json
-from importlib import metadata
 import os
-from pathlib import Path
 import platform
 import re
 import shutil
@@ -26,10 +24,12 @@ import subprocess
 import sys
 import tempfile
 import threading
-import uuid
 import time
 import tomllib
 import urllib.request
+import uuid
+from importlib import metadata
+from pathlib import Path
 from urllib.parse import urlparse
 
 ALLOWLIST = {

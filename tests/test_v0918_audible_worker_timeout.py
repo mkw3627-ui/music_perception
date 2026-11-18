@@ -1,11 +1,8 @@
 """Audible session scan must never hang the host: it runs in a killable worker."""
+import importlib
 import subprocess
 import types
 from pathlib import Path
-
-import pytest
-
-import importlib
 
 plugin_mod = importlib.import_module("music_perception")
 

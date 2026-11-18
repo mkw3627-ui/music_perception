@@ -1,13 +1,10 @@
 """Regression of AI-first spectrum ingestion and silent context delivery."""
 import asyncio
 import json
-import math
-import threading
+
 import numpy as np
-from plugin.sdk.plugin import Ok
-from music_perception.spectral_context import spectrum_for_ai, auxiliary_cues, ai_auditory_context
-from music_perception.auto_listener import FinishedClip, SAMPLE_RATE
-from test_plugin import plugin_fixture
+from music_perception.auto_listener import SAMPLE_RATE, FinishedClip
+from music_perception.spectral_context import ai_auditory_context, auxiliary_cues, spectrum_for_ai
 
 
 def test_spectrogram_time_frequency_axes_are_consistent():
@@ -104,20 +101,23 @@ def test_isolated_listener_callback_handles_closed_start_loop(plugin_fixture, mo
 
     Native capture thread must remain able to queue the FIRST 10s chunk.
     """
-    from music_perception import auto_listener as listener_module
-    import music_perception as module
     import time
+
+    import music_perception as module
+    from music_perception import auto_listener as listener_module
     plugin, *_ = plugin_fixture
     captured = {}
     received = []
 
     class FakeGate:
-        def __init__(self, *args, **kwargs): pass
+        def __init__(self, *args, **kwargs):
+            pass
     class FakeLiveListener:
         def __init__(self, **kw):
             captured['on_clip'] = kw['on_clip']
             self.running = False
-        def start(self): self.running = True
+        def start(self):
+            self.running = True
         def stop(self):
             self.running = False
             return True
@@ -143,7 +143,8 @@ def test_isolated_listener_callback_handles_closed_start_loop(plugin_fixture, mo
     # Both SDK loops have closed here; our worker's loop is still alive.
     captured['on_clip'](FinishedClip(np.zeros(SAMPLE_RATE), 'live_progress', 1, sequence=4))
     for _ in range(100):
-        if received: break
+        if received:
+            break
         time.sleep(.02)
     assert received == [4]
     asyncio.run(plugin.stop_auto_listen())
@@ -243,7 +244,6 @@ def test_failed_sdk_delivery_is_not_marked_success(plugin_fixture):
     asyncio.run(scenario())
 
 def test_minimal_events_arrive_even_if_auxiliary_analysis_fails(plugin_fixture, monkeypatch):
-    import music_perception as module
     plugin, _, _, pushed = plugin_fixture
     def broken_feature_extractor(*args, **kwargs):
         raise RuntimeError('failed optional melody analyzer')

@@ -8,7 +8,6 @@ from pathlib import Path
 
 from music_perception import lyrics_model_store as store
 from music_perception.lyrics_prepare_worker import report
-from test_plugin import plugin_fixture
 
 
 def _synthetic_base(folder: Path):

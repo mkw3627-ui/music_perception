@@ -2,11 +2,9 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
-import numpy as np
 
-from test_plugin import plugin_fixture
-from music_perception.auto_listener import MusicClipCollector, SAMPLE_RATE, FinishedClip
+import numpy as np
+from music_perception.auto_listener import SAMPLE_RATE, FinishedClip, MusicClipCollector
 
 
 def wave(seconds=2, amplitude=.04):
@@ -76,7 +74,6 @@ def test_session_cap_applies_across_progress_chunks():
 
 
 def test_plugin_sends_music_to_analyzer_while_playing(plugin_fixture, monkeypatch):
-    import music_perception as module
     plugin, music, other, pushed = plugin_fixture
     events = []
 

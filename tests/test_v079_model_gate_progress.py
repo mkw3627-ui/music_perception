@@ -3,18 +3,19 @@
 Simulations deliberately use tiny fake file sizes and NEVER fetch model weights.
 """
 from __future__ import annotations
+
 import asyncio
 import json
 import sys
-import threading
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+from music_perception import MusicPerceptionPlugin
 from music_perception import lyrics_model_store as store
 from music_perception import lyrics_prepare_worker as worker
-from music_perception import MusicPerceptionPlugin
-from types import SimpleNamespace
+
 
 @pytest.fixture
 def plugin_fixture(tmp_path):
@@ -34,7 +35,8 @@ def test_four_model_quick_inventory_never_claims_sha(tmp_path,monkeypatch):
     monkeypatch.setitem(store.MODELS,'tiny',dict(store.MODELS['tiny'],min_bytes=10))
     root=tmp_path/'whisper'
     assert store.inspect_model_files('tiny',root)['state']=='missing'
-    item=root/'tiny';item.mkdir(parents=True)
+    item=root/'tiny'
+    item.mkdir(parents=True)
     (item/'model.bin').write_bytes(b'partial')
     assert store.inspect_model_files('tiny',root)['state']=='incomplete'
     (item/'model.bin').write_bytes(b'0'*40)
@@ -51,15 +53,19 @@ def test_four_model_quick_inventory_never_claims_sha(tmp_path,monkeypatch):
 def test_progress_measurement_uses_partial_file_and_never_invents_network_bytes(tmp_path):
     root=tmp_path/'models'
     assert store.observed_download_bytes('base',root)==0
-    cache=root/'base'/'.cache'/'huggingface'/'download';cache.mkdir(parents=True)
+    cache=root/'base'/'.cache'/'huggingface'/'download'
+    cache.mkdir(parents=True)
     (cache/'model.bin.hash.incomplete').write_bytes(b'a'*1234)
     assert store.observed_download_bytes('base',root)==1234
 
 
 def test_staged_worker_reports_real_partial_bytes_and_final_verification(tmp_path,monkeypatch):
-    model=tmp_path/'models';cache=model/'base'/'.cache'/'huggingface'/'download'
+    model=tmp_path/'models'
+    cache=model/'base'/'.cache'/'huggingface'/'download'
     cache.mkdir(parents=True)
-    dest=tmp_path/'prepare.json';vendor=tmp_path/'vendor';vendor.mkdir()
+    dest=tmp_path/'prepare.json'
+    vendor=tmp_path/'vendor'
+    vendor.mkdir()
     states=[]
     def simulated_download(model_name, root, **kwargs):
         (cache/'model.bin.partial.incomplete').write_bytes(b'1'*100)
@@ -158,9 +164,12 @@ def test_first_activation_is_preflighted_and_frees_gpu_if_not_listening(plugin_f
         import music_perception as package
         closed=[]
         class Probe:
-            def __init__(self,**kwargs):self.device=kwargs['device']
-            def prepare(self):return {'ready':True,'device':self.device}
-            def close(self):closed.append(True)
+            def __init__(self,**kwargs):
+                self.device=kwargs['device']
+            def prepare(self):
+                return {'ready':True,'device':self.device}
+            def close(self):
+                closed.append(True)
         monkeypatch.setattr(package,'PersistentLyricsSession',Probe)
         result=(await plugin.activate_verified_lyrics_model('high','cpu')).value
         assert result['switch_status']=='preparing'
@@ -184,9 +193,12 @@ def test_failed_preflight_never_saves_selected_model(plugin_fixture,monkeypatch)
         import music_perception as package
         closed=[]
         class Probe:
-            def __init__(self,**kwargs):pass
-            def prepare(self):raise RuntimeError('CUDA library unavailable')
-            def close(self):closed.append(True)
+            def __init__(self,**kwargs):
+                pass
+            def prepare(self):
+                raise RuntimeError('CUDA library unavailable')
+            def close(self):
+                closed.append(True)
         monkeypatch.setattr(package,'PersistentLyricsSession',Probe)
         result=(await plugin.activate_verified_lyrics_model('ultra','cuda')).value
         assert result['switch_status']=='preparing'

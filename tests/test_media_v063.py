@@ -1,15 +1,13 @@
 """Windows metadata protocol, privacy, isolated track ownership. No network."""
 from __future__ import annotations
+
 import asyncio
 import json
 import subprocess
-from pathlib import Path
 from types import SimpleNamespace
 
-from music_perception.media_session_bridge import read_system_media
 from music_perception.lyric_timing import align_lyrics_to_music
-from music_perception import MusicPerceptionPlugin
-from test_plugin import plugin_fixture
+from music_perception.media_session_bridge import read_system_media
 
 
 def test_gbk_independent_metadata_protocol_uses_utf8_json(tmp_path, monkeypatch):
@@ -87,13 +85,19 @@ def test_windows_media_session_seamless_switch_without_silence(plugin_fixture,mo
           'player':'SamplePlayer.exe','title':'第一首','artist':'测试','position_s':55.0}
     monkeypatch.setattr(module,'read_system_media',lambda **kw:dict(info))
     class FakeRuntime:
-        def snapshot(self):return {'ready':True}
-        def worker_runtime(self):return '/test/python.exe','/test/vendor'
-        def stop(self):pass
+        def snapshot(self):
+            return {'ready':True}
+        def worker_runtime(self):
+            return '/test/python.exe','/test/vendor'
+        def stop(self):
+            pass
     class Listener:
-        def __init__(self):self.changes=0
-        def mark_track_changed(self):self.changes+=1
-        def stop(self):pass
+        def __init__(self):
+            self.changes=0
+        def mark_track_changed(self):
+            self.changes+=1
+        def stop(self):
+            pass
     plugin,_,_,_=plugin_fixture
     async def run():
         await plugin.startup()

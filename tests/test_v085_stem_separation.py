@@ -1,16 +1,12 @@
 """0.8.5 optional full-band local stem separation regression."""
 from __future__ import annotations
+
 import asyncio
-import math
-from pathlib import Path
 
 import numpy as np
-import pytest
-
 from music_perception import stem_mdx
 from music_perception.auto_listener import FinishedClip, MusicClipCollector, RapidLyricsSampler
 from music_perception.lyrics_continuity import join_song_audio
-from test_plugin import plugin_fixture
 
 
 def test_stft_istft_roundtrip_44k_stereo():
@@ -37,9 +33,12 @@ def test_mdx_splits_both_stems_without_using_torch(monkeypatch,tmp_path):
         name='input'
         shape=[1,4,3072,256]
     class IdentityInstrument:
-        def get_inputs(self):return [Input()]
-        def get_providers(self):return ['CPUExecutionProvider']
-        def run(self,names,feed):return [feed['input']]
+        def get_inputs(self):
+            return [Input()]
+        def get_providers(self):
+            return ['CPUExecutionProvider']
+        def run(self,names,feed):
+            return [feed['input']]
     model=stem_mdx.TwoStemMDX(tmp_path/'fake.onnx',session_factory=lambda *_:IdentityInstrument())
     sr=44100
     t=np.arange(sr*2)/sr
@@ -57,11 +56,13 @@ def test_fullband_preview_and_10second_clip_buffers():
     sampler=RapidLyricsSampler()
     frames=np.ones(32000,dtype='float32')*.03
     stereo=np.ones((96000,2),dtype='float32')*.03
-    sequence=None; preview=None; clip=None
+    preview=None
+    clip=None
     full_candidates=[]
     for i in range(5):
         clip=collector.feed(frames,True,full_band=stereo)
-        if i<2:full_candidates.append(stereo)
+        if i<2:
+            full_candidates.append(stereo)
         if collector.recording:
             high=list(full_candidates) if i==1 else [stereo]
             low=collector._music if i==1 else [frames]
@@ -70,7 +71,8 @@ def test_fullband_preview_and_10second_clip_buffers():
     assert preview is not None and preview.full_band_samples.shape==(288000,2)
     assert preview.full_band_rate==48000
     # Track boundary clears both microphone-free buffers.
-    collector.discard();sampler.reset()
+    collector.discard()
+    sampler.reset()
     assert sampler._full_frames==[]
 
 
@@ -121,11 +123,14 @@ def test_split_failure_falls_back_and_mutes_retries(plugin_fixture,monkeypatch):
             'preferred_quality':'ultra','reason':'mock_verified_local_stem'}
         plugin._stem_faulted=False
         from music_perception import PersistentStemSession
-        def fail(*a,**kw):raise RuntimeError('mocked corrupted model')
+        def fail(*a,**kw):
+            raise RuntimeError('mocked corrupted model')
         monkeypatch.setattr(PersistentStemSession,'__init__',fail)
         class Env:
-            def worker_runtime(self):return ('python.exe','vendor')
-            def stop(self):pass
+            def worker_runtime(self):
+                return ('python.exe','vendor')
+            def stop(self):
+                pass
         plugin._environment=Env()
         pcm=np.zeros((48000*2,2),dtype=np.float32)
         clip=FinishedClip(np.zeros(32000,dtype=np.float32),'live_progress',1,
@@ -139,8 +144,7 @@ def test_split_failure_falls_back_and_mutes_retries(plugin_fixture,monkeypatch):
 
 
 def test_isolated_pipe_can_transfer_two_second_full_band_stereo(monkeypatch,tmp_path):
-    import music_perception.isolated_loopback as iso
-    from test_isolated_loopback import prepare,pack
+    from test_isolated_loopback import pack, prepare
     stereo=np.arange(2*48000*2,dtype='<f4')/500000
     mono=np.ones(32000,dtype='<f4')*.04
     source,procs=prepare(monkeypatch,tmp_path,
@@ -157,8 +161,10 @@ def test_isolated_pipe_can_transfer_two_second_full_band_stereo(monkeypatch,tmp_
 
 def test_stem_bridge_real_local_pipe_mock_worker(tmp_path):
     import sys
+
     from music_perception.stem_bridge import PersistentStemSession
-    vendor=tmp_path/'vendor';vendor.mkdir()
+    vendor=tmp_path/'vendor'
+    vendor.mkdir()
     worker=tmp_path/'mock_worker.py'
     worker.write_text('''import sys,struct,json,array
 L=struct.Struct('!I')
@@ -235,22 +241,32 @@ def test_parallel_song_analysis_does_not_block_fast_lyrics(plugin_fixture):
 
 def test_pipe_sender_handles_short_writes(tmp_path):
     """Windows raw pipes may accept fewer bytes than passed to write()."""
-    import json, struct, sys
+    import json
+    import struct
+    import sys
+
     from music_perception.stem_bridge import PersistentStemSession
     class PartialPipe:
-        def __init__(self):self.data=bytearray()
+        def __init__(self):
+            self.data=bytearray()
         def write(self,payload):
             count=min(len(payload),7)
-            self.data.extend(payload[:count]);return count
-        def flush(self):pass
-        def close(self):pass
+            self.data.extend(payload[:count])
+            return count
+        def flush(self):
+            pass
+        def close(self):
+            pass
     class FakeChild:
         def __init__(self):
             self.stdin=PartialPipe()
             self.stdout=PartialPipe()
-        def poll(self):return None
-        def terminate(self):pass
-        def wait(self,timeout=None):return 0
+        def poll(self):
+            return None
+        def terminate(self):
+            pass
+        def wait(self,timeout=None):
+            return 0
     model=PersistentStemSession(python=sys.executable,vendor=tmp_path,
                                 script=__file__,weights=tmp_path/'none.onnx')
     model._child=FakeChild()
@@ -284,7 +300,8 @@ def test_stem_state_reports_real_device_not_requested_device(plugin_fixture,monk
                 return {'vocals':np.zeros(32000,dtype='float32'),
                         'instrumental':np.zeros(32000,dtype='float32'),
                         'device':'cpu','warning':'estimate only'}
-            def close(self):pass
+            def close(self):
+                pass
         plugin._stem_session=FakeSession()
         plugin._stem_effective_session=('ultra','cpu')
         clip=FinishedClip(np.zeros(32000,dtype='float32'),'live_progress',1,

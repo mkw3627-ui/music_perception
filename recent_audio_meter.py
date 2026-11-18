@@ -6,7 +6,7 @@ recent meter is NOT evidence that sound is audible at the current instant.
 """
 from __future__ import annotations
 
-from typing import Callable, Any
+from typing import Callable
 
 
 def merge_recent_meter(current: list[dict], history: dict[str, dict], *,

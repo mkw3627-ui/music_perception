@@ -6,14 +6,12 @@ Public checkpoints only; no copyrighted lyrics database is bundled.
 """
 from __future__ import annotations
 
-from pathlib import Path
 import hashlib
 import json
 import os
 import shutil
-import tempfile
-import time
 import threading
+from pathlib import Path
 
 PROFILES = {
     'low': {'id':'sing-whisper-small','repo':'Systran/faster-whisper-small',
@@ -209,7 +207,8 @@ def _download_modelscope(stage: Path, quality: str, *, lfs: dict, on_bytes=None)
             continue
         base=done
         def progress(received,_total,_fresh,base=base):
-            if on_bytes:on_bytes(base+int(received))
+            if on_bytes:
+                on_bytes(base+int(received))
         if pinned:
             _stream_to_file(url,target,min_bytes=1_000_000,max_bytes=6_000_000_000,
                             expected_sha256=pinned,transfer_progress=progress)
@@ -235,7 +234,8 @@ def acquire_model(root: Path, quality: str, *, source='official', on_stage=None,
     if old is not None:
         return {'state':'verified','reused':True,'model':PROFILES[quality]['id']}
     from huggingface_hub import HfApi, snapshot_download
-    root=Path(root);root.mkdir(parents=True,exist_ok=True)
+    root=Path(root)
+    root.mkdir(parents=True,exist_ok=True)
     spec=PROFILES[quality]
     endpoints= ((MODELSCOPE,'https://hf-mirror.com','https://huggingface.co') if source=='mirror'
                 else ('https://huggingface.co','https://hf-mirror.com',MODELSCOPE))
@@ -243,7 +243,8 @@ def acquire_model(root: Path, quality: str, *, source='official', on_stage=None,
     # endpoint. Mirrors may only supply bytes validated against these hashes.
     revision=PINNED_REVISION[quality]
     lfs=dict(PINNED_WEIGHT_HASHES[quality])
-    if on_stage:on_stage('verifying_upstream_manifest')
+    if on_stage:
+        on_stage('verifying_upstream_manifest')
     try:
         if source=='mirror':
             # 国内直连 huggingface.co 的 API 常卡到超时；镜像优先时只用固定 SHA。
@@ -262,13 +263,15 @@ def acquire_model(root: Path, quality: str, *, source='official', on_stage=None,
     except Exception:
         # The immutable public weight SHA pins remain mandatory; missing
         # official API metadata never means blindly trusting a mirror.
-        if on_stage:on_stage('using_pinned_sha256_offline')
+        if on_stage:
+            on_stage('using_pinned_sha256_offline')
     final=model_folder(root,quality)
     last_error=None
     for endpoint in endpoints:
         stage=root / (spec['id']+'.partial')
         try:
-            if on_stage:on_stage('downloading:'+endpoint)
+            if on_stage:
+                on_stage('downloading:'+endpoint)
             # snapshot_download uses a content-addressed cache and supports
             # repeated / interrupted runs. Keep it entirely under data/models.
             # Read only local file sizes while the Hub downloader works.  The
@@ -304,7 +307,8 @@ def acquire_model(root: Path, quality: str, *, source='official', on_stage=None,
                 on_progress('verifying',{'bytes_received':snapshot_bytes(stage),
                       'total_bytes':expected,'progress_pct':99,'progress_estimated':True,
                       'speed_bytes_s':None,'eta_seconds':None})
-            if on_stage:on_stage('sha256_verification')
+            if on_stage:
+                on_stage('sha256_verification')
             # 前一个来源（如魔搭）中断留下的断点文件，换源成功后不再需要。
             for leftover in list(stage.glob('*.partial'))+list(stage.glob('*.restart')):
                 leftover.unlink(missing_ok=True)
@@ -327,7 +331,8 @@ def acquire_model(root: Path, quality: str, *, source='official', on_stage=None,
                     'revision':revision}
         except Exception as exc:
             last_error=exc
-            if on_stage:on_stage('retry_or_failed:'+type(exc).__name__)
+            if on_stage:
+                on_stage('retry_or_failed:'+type(exc).__name__)
     raise SingingModelError('模型下载或验证失败；未修改原来的可用模型：'+type(last_error).__name__)
 
 

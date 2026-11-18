@@ -4,16 +4,15 @@ These are deterministic local tests; they don't attest native Windows process
 loopback or NVIDIA GPU correctness on the user's PC.
 """
 from __future__ import annotations
+
 import asyncio
 import time
 from pathlib import Path
 
 import numpy as np
-
 from music_perception import MusicPerceptionPlugin
-from music_perception.auto_listener import LiveListener, Decision, SAMPLE_RATE
+from music_perception.auto_listener import SAMPLE_RATE, Decision, LiveListener
 from music_perception.song_memory import RecentSongMemory
-from test_plugin import plugin_fixture
 
 
 def test_startup_autosenses_and_private_ai_context(plugin_fixture,monkeypatch):
@@ -96,18 +95,24 @@ def test_default_system_mix_without_ai_review_does_not_allocate_asr(plugin_fixtu
 def test_yamnet_model_is_lazy_until_first_non_silent_pcm(tmp_path):
     calls=[]
     class Tap:
-        def __init__(self):self.reads=0
-        def __enter__(self):return self
-        def __exit__(self,*args):pass
+        def __init__(self):
+            self.reads=0
+        def __enter__(self):
+            return self
+        def __exit__(self,*args):
+            pass
         def read(self):
             self.reads+=1
             # Three silent reads must not allocate the YAMNet checkpoint.
-            if self.reads<4:return np.zeros(2*SAMPLE_RATE,np.float32)
+            if self.reads<4:
+                return np.zeros(2*SAMPLE_RATE,np.float32)
             listener._stop.set()
             return np.full(2*SAMPLE_RATE,.08,np.float32)
     class Gate:
-        def __init__(self,*a,**k): calls.append('allocated')
-        def classify(self,data): return Decision(False,.1,.4)
+        def __init__(self,*a,**k):
+            calls.append('allocated')
+        def classify(self,data):
+            return Decision(False,.1,.4)
     listener=LiveListener(model_file=tmp_path/'mock',max_seconds=60,threshold=.2,
         on_clip=lambda _:None,source_factory=Tap,gate_factory=Gate,
         scene_decider=lambda d:{'kind':'unknown','verified':False,
@@ -118,8 +123,10 @@ def test_yamnet_model_is_lazy_until_first_non_silent_pcm(tmp_path):
     class ShortTap(Tap):
         def read(self):
             self.reads+=1
-            if self.reads<4:return np.zeros(2*SAMPLE_RATE,np.float32)
-            if self.reads==4:return np.full(2*SAMPLE_RATE,.08,np.float32)
+            if self.reads<4:
+                return np.zeros(2*SAMPLE_RATE,np.float32)
+            if self.reads==4:
+                return np.full(2*SAMPLE_RATE,.08,np.float32)
             listener._stop.set()
             return np.zeros(2*SAMPLE_RATE,np.float32)
     listener._source_factory=ShortTap
@@ -144,7 +151,8 @@ def test_ai_focus_rejects_unverified_or_ai_program_before_stopping(plugin_fixtur
     p,*_=plugin_fixture
     async def task():
         await p.startup()
-        p._auto_consented=True;p._ai_delivery=True
+        p._auto_consented=True
+        p._ai_delivery=True
         monkeypatch.setattr(p._process_capture_install,'installed',lambda:True)
         monkeypatch.setattr('music_perception.verify_selected_process',lambda pid,created:True)
         p._audible_scan_at=time.time()
@@ -226,10 +234,14 @@ def test_live_app_focus_stops_old_source_and_clears_identity(plugin_fixture,monk
         p._capture_mode='application'
         p._selected_application={'pid':717,'created':'1234567890123456789',
                                  'name':'OldApp.exe','mode':'auto'}
-        stopped=[];started=[]
+        stopped=[]
+        started=[]
         class OldListener:
             running=True
-            def stop(self):stopped.append('stopped');self.running=False;return True
+            def stop(self):
+                stopped.append('stopped')
+                self.running=False
+                return True
         p._listener=OldListener()
         monkeypatch.setattr(p,'_stop_background_processor',lambda:stopped.append('processor'))
         async def fake_start_live():
@@ -249,19 +261,28 @@ def test_even_lightweight_music_classifier_waits_for_external_review(tmp_path):
     reviews={'allowed':False}
     counts=[]
     class Tap:
-        def __enter__(self):return self
-        def __exit__(self,*_):pass
-        def __init__(self):self.n=0
+        def __enter__(self):
+            return self
+        def __exit__(self,*_):
+            pass
+        def __init__(self):
+            self.n=0
         def read(self):
             self.n+=1
-            if self.n==3:reviews['allowed']=True
-            if self.n==5:reviews['allowed']=False
-            if self.n==6:reviews['allowed']=True
-            if self.n==7:listener._stop.set()
+            if self.n==3:
+                reviews['allowed']=True
+            if self.n==5:
+                reviews['allowed']=False
+            if self.n==6:
+                reviews['allowed']=True
+            if self.n==7:
+                listener._stop.set()
             return np.ones(SAMPLE_RATE,np.float32)*.08
     class Gate:
-        def __init__(self,*args,**kwargs):counts.append('loaded')
-        def classify(self,pcm):return Decision(False,.0,.8,reason='speech')
+        def __init__(self,*args,**kwargs):
+            counts.append('loaded')
+        def classify(self,pcm):
+            return Decision(False,.0,.8,reason='speech')
     listener=LiveListener(model_file=tmp_path/'fake-yamnet', max_seconds=30,
         threshold=.2,on_clip=lambda _:None,source_factory=Tap,gate_factory=Gate,
         classifier_allowed=lambda:reviews['allowed'],

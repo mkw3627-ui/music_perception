@@ -5,17 +5,17 @@ sound device required. These tests do not capture or retain audio.
 """
 from __future__ import annotations
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import numpy as np
 import pytest
-
 from music_perception.analysis_bridge import (
-    AnalysisWorkerCancelled, AnalysisWorkerError, _worker_failure,
+    AnalysisWorkerCancelled,
+    AnalysisWorkerError,
+    _worker_failure,
     analyze_pcm_isolated,
 )
-from music_perception import MusicPerceptionPlugin
 
 ROOT = Path(__file__).resolve().parents[1]
 

@@ -9,15 +9,15 @@ No N.E.K.O SDK import: this runs in the independently managed CPython worker.
 from __future__ import annotations
 
 import hashlib
+import http.client
 import json
 import os
-import urllib.request
-import urllib.error
-import http.client
 import re
-from urllib.parse import quote, urlparse
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Callable
+from urllib.parse import quote, urlparse
 
 
 class LyricsModelDownloadError(RuntimeError):
@@ -158,7 +158,8 @@ def observed_download_bytes(model_name: str, root: Path) -> int:
     for direct_name in ('model.bin.partial','model.bin.download'):
         direct = target / direct_name
         try:
-            if direct.is_file(): sizes.append(direct.stat().st_size)
+            if direct.is_file():
+                sizes.append(direct.stat().st_size)
         except OSError:
             pass
     cache = target / '.cache' / 'huggingface' / 'download' 

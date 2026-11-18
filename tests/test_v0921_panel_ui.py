@@ -8,8 +8,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import pytest
-
 ROOT = Path(__file__).resolve().parent.parent
 PANEL = ROOT / "ui" / "panel.tsx"
 ONBOARD = ROOT / "ui" / "onboarding.tsx"

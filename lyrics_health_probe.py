@@ -4,15 +4,15 @@ A GPU model preflight uses one second of generated silence, ONLY when the
 plugin is idle. It never downloads weights or repairs system drivers.
 """
 from __future__ import annotations
+
 import importlib
 import importlib.metadata
 import json
-import os
-from pathlib import Path
 import platform
+import subprocess
 import sys
 import time
-import subprocess
+from pathlib import Path
 
 
 def _save(path, payload):
@@ -54,8 +54,10 @@ def run_probe(vendor, model_dir, model_name, requested_device, report_file,
                 if len(fields)>=3:
                     out['gpu_name']=fields[0].strip()[:100]
                     out['nvidia_driver']=fields[1].strip()[:40]
-                    try: out['gpu_free_mib']=int(fields[2].strip())
-                    except ValueError: pass
+                    try:
+                        out['gpu_free_mib']=int(fields[2].strip())
+                    except ValueError:
+                        pass
                     step('nvidia_driver','ok','驱动与显存信息已读取（不代表 CUDA 推理成功）')
             else:
                 step('nvidia_driver','unknown','nvidia-smi 不可用；不代表一定没有 NVIDIA 显卡')
@@ -63,7 +65,9 @@ def run_probe(vendor, model_dir, model_name, requested_device, report_file,
             step('nvidia_driver','unknown','无法读取 nvidia-smi，仍会尝试 CTranslate2 检测')
     if not Path(vendor).is_dir():
         step('python_environment','failed','插件隔离依赖目录不可用')
-        out['state']='failed';_save(report_file,out);return out
+        out['state']='failed'
+        _save(report_file,out)
+        return out
     # Metadata queries do not import the entire DSP stack or start CUDA.
     names = {'numpy':'numpy', 'faster-whisper':'faster-whisper',
              'ctranslate2':'ctranslate2', 'tokenizers':'tokenizers',

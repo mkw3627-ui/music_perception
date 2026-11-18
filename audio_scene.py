@@ -10,7 +10,6 @@ output => block. An unverified 'video-like' speech window is NOT called video.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from typing import Mapping
 
 VALID_ROLES = {'music', 'video', 'ai', 'unknown'}
 

@@ -5,6 +5,7 @@ obvious *possible* seamless transitions, not song identity. No fingerprint DB,
 network calls, raw-audio caching or microphone capture.
 """
 from __future__ import annotations
+
 from collections import deque
 
 
@@ -29,8 +30,10 @@ class SongChangeDetector:
     def fingerprint(samples):
         import numpy as np
         x=np.asarray(samples,dtype=np.float32).ravel()
-        if x.size<8000 or not np.isfinite(x).all():return None
-        if float(np.sqrt(np.mean(x*x)))<.001:return None
+        if x.size<8000 or not np.isfinite(x).all():
+            return None
+        if float(np.sqrt(np.mean(x*x)))<.001:
+            return None
         n=8192
         # Several Hann-windowed excerpts suppress reliance on one transient.
         slices=[]
@@ -54,10 +57,12 @@ class SongChangeDetector:
         bands/=np.linalg.norm(bands)+1e-9
         # Tempo/accent proxy: local RMS activity at ~50 ms resolution. This
         # is rhythmic-change evidence, NOT a tempo or downbeat measurement.
-        frame=max(400,int(16000*.05)); usable=x[:len(x)//frame*frame]
+        frame=max(400,int(16000*.05))
+        usable=x[:len(x)//frame*frame]
         energy=np.sqrt(np.mean(usable.reshape(-1,frame)**2,axis=1))
         diff=np.maximum(0.,np.diff(energy,prepend=energy[0]))
-        if diff.max()>0:diff/=diff.max()
+        if diff.max()>0:
+            diff/=diff.max()
         autoc=np.correlate(diff-diff.mean(),diff-diff.mean(),mode='full')[len(diff)-1:]
         lag=np.argmax(autoc[5:min(len(autoc),22)])+5 if len(autoc)>10 else 10
         # one lag (0.25-1.05s) is enough for novelty, not a BPM assertion.
@@ -71,7 +76,8 @@ class SongChangeDetector:
             self._recent.clear()
             return None
         entry=self.fingerprint(samples)
-        if entry is None:return None
+        if entry is None:
+            return None
         self._n+=1
         if len(self._begin)<4:
             self._begin.append(entry)
@@ -96,7 +102,8 @@ class SongChangeDetector:
         # within one song; audio-only detection remains probabilistic.
         different=(pitch>.28 and timbre>.10 and rhythm>.24 and confidence>.25)
         self._streak=self._streak+1 if different else 0
-        if self._streak<self.confirmation:return None
+        if self._streak<self.confirmation:
+            return None
         self.last_evidence={'source':'audio_tonal_rhythm_timbre_change',
                             'status':'candidate_not_confirmed_identity',
                             'confidence':confidence,

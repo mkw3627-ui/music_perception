@@ -1,17 +1,16 @@
 """v0.9.9: failure diagnostics, removable private venv and model page action audit."""
 from __future__ import annotations
-import asyncio
-from pathlib import Path
+
 import re
 import sys
 import threading
 import time
-from types import SimpleNamespace
+from pathlib import Path
 
 import pytest
+from _version import ui_build  # noqa: E402
 from music_perception import MusicPerceptionPlugin
 from music_perception import singing_install as install
-from _version import ui_build, panel_ui_build, plugin_version  # noqa: E402
 
 
 def test_private_command_failure_captures_actionable_error(tmp_path):
@@ -27,9 +26,13 @@ def test_private_command_failure_captures_actionable_error(tmp_path):
 def test_private_command_can_be_cancelled_without_touching_other_files(tmp_path):
     cancel=threading.Event()
     original=tmp_path/'models'/'keep.bin'
-    original.parent.mkdir();original.write_bytes(b'keep')
-    def request():time.sleep(.15);cancel.set()
-    thread=threading.Thread(target=request,daemon=True);thread.start()
+    original.parent.mkdir()
+    original.write_bytes(b'keep')
+    def request():
+        time.sleep(.15)
+        cancel.set()
+    thread=threading.Thread(target=request,daemon=True)
+    thread.start()
     with pytest.raises(install.SingingInstallCancelled):
         install._launch([sys.executable,'-c','import time;time.sleep(6)'],
                         timeout=8,cancel_event=cancel,log_path=tmp_path/'install.log')
@@ -43,9 +46,11 @@ def test_private_env_removes_only_dedicated_venv(tmp_path):
     private.mkdir(parents=True)
     (private/'bad_dependency.pyd').write_bytes(b'broken')
     shared=environment/'private_cuda'/'do_not_touch.dll'
-    shared.parent.mkdir();shared.write_bytes(b'cuda')
+    shared.parent.mkdir()
+    shared.write_bytes(b'cuda')
     models=tmp_path/'models'/'singing_specialist'/'model.bin'
-    models.parent.mkdir(parents=True);models.write_bytes(b'weights')
+    models.parent.mkdir(parents=True)
+    models.write_bytes(b'weights')
     result=install.uninstall_environment(environment,retries=1)
     assert result['ok'] and not private.exists()
     assert shared.read_bytes()==b'cuda' and models.read_bytes()==b'weights'
@@ -53,11 +58,15 @@ def test_private_env_removes_only_dedicated_venv(tmp_path):
 
 
 def test_private_env_symlink_must_not_be_deleted(tmp_path):
-    env=tmp_path/'environment';env.mkdir()
-    target=tmp_path/'outside';target.mkdir()
+    env=tmp_path/'environment'
+    env.mkdir()
+    target=tmp_path/'outside'
+    target.mkdir()
     (target/'keep').write_text('valuable')
-    try:(env/'singing_asr_venv').symlink_to(target,target_is_directory=True)
-    except (NotImplementedError,OSError):pytest.skip('platform blocks symlinks')
+    try:
+        (env/'singing_asr_venv').symlink_to(target,target_is_directory=True)
+    except (NotImplementedError,OSError):
+        pytest.skip('platform blocks symlinks')
     with pytest.raises(install.SingingInstallError,match='不安全'):
         install.uninstall_environment(env)
     assert (target/'keep').read_text()=='valuable'
@@ -67,9 +76,11 @@ def test_private_env_symlink_must_not_be_deleted(tmp_path):
 async def test_private_env_uninstall_action_preserves_weights_and_removes_venv(tmp_path):
     obj=object.__new__(MusicPerceptionPlugin)
     directory=tmp_path/'environment'/'singing_asr_venv'
-    directory.mkdir(parents=True);(directory/'broken.txt').write_text('x')
+    directory.mkdir(parents=True)
+    (directory/'broken.txt').write_text('x')
     model=tmp_path/'models'/'singing_specialist'/'checkpoint'
-    model.parent.mkdir(parents=True);model.write_text('keep')
+    model.parent.mkdir(parents=True)
+    model.write_text('keep')
     obj.data_path=lambda name:tmp_path/name
     obj._asr_residency_lock=threading.RLock()
     obj._singing_activation_token=0

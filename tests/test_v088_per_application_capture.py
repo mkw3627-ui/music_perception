@@ -4,21 +4,17 @@ Offline doubles only; real Windows WASAPI and proc-tap wheel still require
 Windows application integration testing.
 """
 from __future__ import annotations
+
 import asyncio
-import io
-import os
 from pathlib import Path
+
 import numpy as np
 import pytest
-
-from music_perception import MusicPerceptionPlugin
+from _version import plugin_version, ui_build  # noqa: E402
 from music_perception import app_channels
 from music_perception.auto_listener import Decision
-from music_perception.application_loopback_worker import _stream
 from music_perception.isolated_loopback import IsolatedApplicationLoopback, IsolatedWindowsLoopback
 from music_perception.process_capture_installer import ProcessCaptureInstaller
-from test_plugin import plugin_fixture
-from _version import ui_build, panel_ui_build, plugin_version  # noqa: E402
 
 
 def d(music=False, score=0.0, speech=0.0):
@@ -46,7 +42,8 @@ def test_video_music_speech_overlap_stays_blocked():
 def test_ai_voices_cannot_enter_recognition():
     app={'pid':22001,'created':'1234567890123456789','mode':'ai'}
     assert app_channels.selected_scene(d(True,.9,.9),app)['kind']=='ai_output'
-    app['mode']='music';app['might_contain_ai_tts']=True
+    app['mode']='music'
+    app['might_contain_ai_tts']=True
     assert app_channels.selected_scene(d(True,.9,.9),app,ai_voice_active=True)['kind']=='ai_output'
 
 
@@ -117,7 +114,8 @@ def test_process_installer_never_installs_without_consent(tmp_path):
 def test_application_backend_requires_specific_worker(tmp_path, monkeypatch):
     monkeypatch.setattr(IsolatedWindowsLoopback,'_validate_paths',lambda self:None)
     monkeypatch.setattr('music_perception.app_channels.verify_selected_process',lambda p,t:True)
-    addon=tmp_path/'addon';addon.mkdir()
+    addon=tmp_path/'addon'
+    addon.mkdir()
     sample=IsolatedApplicationLoopback(
       python='/fake/python.exe',vendor=tmp_path,app_vendor=addon,pid=500,
       created='1234567890123456789',worker_script=tmp_path/'application_loopback_worker.py',
@@ -140,11 +138,13 @@ def test_selected_process_samples_not_mixed_with_other_process(monkeypatch):
         def read(self,timeout=0.3):
             # Synthetic user-selected process 500 frames only; no system PCM.
             return np.full((96_000,2),.25,np.float32).tobytes()
-    class End(Exception):pass
+    class End(Exception):
+        pass
     captured=[]
     def sender(tag,payload):
         captured.append((tag,payload))
-        if tag==b'D':raise End()
+        if tag==b'D':
+            raise End()
     monkeypatch.setattr(w,'_send',sender)
     with pytest.raises(End):
         w._stream(FakeTap(),500,'1234567890123456789',stereo=True)
@@ -281,8 +281,10 @@ def test_compiled_wheel_hashes_for_supported_windows_python_are_pinned():
 
 def test_installer_marker_without_windows_native_extension_not_ready(tmp_path):
     import json
-    root=tmp_path/'app_capture';root.mkdir()
-    directory=root/'proc-tap-1.1.1-fake';directory.mkdir()
+    root=tmp_path/'app_capture'
+    root.mkdir()
+    directory=root/'proc-tap-1.1.1-fake'
+    directory.mkdir()
     (directory/'.neko-process-capture-ready').write_text('1.1.1')
     (root/'process_capture_active.json').write_text(json.dumps({'dir':str(directory),'version':'1.1.1'}))
     assert not ProcessCaptureInstaller(root).installed()

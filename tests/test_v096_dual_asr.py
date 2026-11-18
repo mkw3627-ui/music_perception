@@ -1,18 +1,14 @@
 """Offline v0.9.6 dual engine, safe checkpoint management and accuracy gates."""
 import hashlib
-import importlib
-import json
 from pathlib import Path
-import types
 
 import numpy as np
 import pytest
-
+from _version import ui_build  # noqa: E402
 from music_perception import singing_backend as sb
 from music_perception import singing_catalog as catalog
-from music_perception import singing_quality_eval as evals
 from music_perception import singing_install as install
-from _version import ui_build, panel_ui_build, plugin_version  # noqa: E402
+from music_perception import singing_quality_eval as evals
 
 
 def _model_files(root, monkeypatch, quality='low'):
@@ -167,7 +163,8 @@ def test_target_metric_multilingual_and_threshold():
     complete[-1]['predicted']='I hear'
     assert evals.measure(complete)['passed'] is False
     rows[0]['source']='whole_song_mix'
-    with pytest.raises(ValueError):evals.measure(rows)
+    with pytest.raises(ValueError):
+        evals.measure(rows)
 
 
 def test_incomplete_benchmark_cannot_falsely_pass():

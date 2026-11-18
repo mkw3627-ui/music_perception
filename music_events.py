@@ -60,8 +60,8 @@ def harmonic_percussive_observations(wave: Any, *, rate: int = SR,
     Cannot distinguish singer from guitar, bass from drums, or backing vocals
     from lead vocals; those require a pretrained source separation model.
     """
-    import numpy as np
     import librosa
+    import numpy as np
     x = np.asarray(wave, dtype=np.float32).reshape(-1)
     if len(x) < 1024:
         return {'method': 'hpss_spectral_proxy', 'status': 'insufficient_audio',
@@ -105,7 +105,6 @@ def timed_music_events(report: dict, *, waveform: Any | None = None,
     trustworthy media clock. Skipped non-music gaps make this clock diverge
     from real song progress; never label it a media/player timestamp.
     """
-    import numpy as np
     duration = float(report.get('duration_s') or 0)
     rhythm = report.get('rhythm') or {}
     beats = _times(rhythm.get('beat_times_s') or [], duration)
@@ -138,7 +137,8 @@ def timed_music_events(report: dict, *, waveform: Any | None = None,
         events.append(row)
     meter_data=rhythm.get('meter_candidates') or {}
     for group in meter_data.get('events',[]):
-        row=dict(group);row['at_s']=_seconds(row.get('at_s',0),offset_s)
+        row=dict(group)
+        row['at_s']=_seconds(row.get('at_s',0),offset_s)
         events.append(row)
     chords = (report.get('harmony') or {}).get('chord_progression_estimate') or {}
     chord_changes=[]
@@ -366,19 +366,25 @@ def offset_event_timeline(timeline: dict, offset_s: float, *,
                 e[field] = _seconds(e[field],delta)
     shifted_ids={id(e) for e in out.get('events',[])}
     for a in (out.get('metrical_downbeat_hypotheses') or {}).get('events',[]):
-        if id(a) not in shifted_ids and 'at_s' in a:a['at_s']=_seconds(a['at_s'],delta)
+        if id(a) not in shifted_ids and 'at_s' in a:
+            a['at_s']=_seconds(a['at_s'],delta)
     for a in (out.get('beat_accents') or {}).get('events', []):
-        if id(a) not in shifted_ids and 'at_s' in a: a['at_s'] = _seconds(a['at_s'],delta)
+        if id(a) not in shifted_ids and 'at_s' in a:
+            a['at_s'] = _seconds(a['at_s'],delta)
     for a in (out.get('chord_progression') or {}).get('changes', []):
-        if 'at_s' in a: a['at_s'] = _seconds(a['at_s'],delta)
+        if 'at_s' in a:
+            a['at_s'] = _seconds(a['at_s'],delta)
     for a in (out.get('chord_progression') or {}).get('segments', []):
         for field in ('from_s','end_s'):
-            if field in a:a[field]=_seconds(a[field],delta)
+            if field in a:
+                a[field]=_seconds(a[field],delta)
     for e in out.get('mood_sections', []):
         for field in ('from_s','to_s'):
-            if field in e: e[field] = _seconds(e[field],delta)
+            if field in e:
+                e[field] = _seconds(e[field],delta)
     for p in (out.get('lyrics') or {}).get('timed_cues', []):
-        if 'at_s' in p: p['at_s'] = _seconds(p['at_s'],delta)
+        if 'at_s' in p:
+            p['at_s'] = _seconds(p['at_s'],delta)
     return out
 
 
@@ -392,7 +398,8 @@ def enrich_with_user_lrc(timeline: dict, lines: list[dict]) -> dict:
         if 0 <= t < float(out.get('duration_s', 0)):
             cues.append({'at_s':round(t,3), 'text_preview':str(line.get('text',''))[:32],
                          'provenance':'user_supplied_lrc', 'not_asr':True})
-        if len(cues)>=1000: break
+        if len(cues)>=1000:
+            break
     out['lyrics']={'status':'user_supplied_lrc_aligned_to_file_start' if cues else 'not_available',
                    'timed_cues':cues,
                    'source':'adjacent_authorized_lrc',

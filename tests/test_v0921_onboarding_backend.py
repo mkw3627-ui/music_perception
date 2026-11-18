@@ -2,20 +2,17 @@
 """新手引导后端单测（2026-11-13）：OnboardingStore / validate / recommend / installer。"""
 from __future__ import annotations
 
-import json
-import os
+import importlib
 import sys
 import threading
 import time
 from pathlib import Path
 
-import pytest
-
 _SOURCE = str(Path(__file__).resolve().parents[1])
 if _SOURCE not in sys.path:
     sys.path.insert(0, _SOURCE)
 
-import onboarding  # noqa: E402
+onboarding = importlib.import_module("onboarding")
 
 
 # ── OnboardingStore ────────────────────────────────────────────────────

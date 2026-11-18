@@ -1,17 +1,14 @@
 """Resource-pressure, genuine device choice, ASR mutual exclusion and UI policies."""
 from __future__ import annotations
-import asyncio
-import json
+
 import threading
 import time
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
 from music_perception import MusicPerceptionPlugin
-from music_perception.adaptive_resources import (select_model, gpu_memory,
-    PressureTracker, DOMAINS, DEFAULT_RESERVE_MIB)
+from music_perception.adaptive_resources import DOMAINS, PressureTracker, gpu_memory, select_model
 
 REQUIREMENTS={'low':1100,'medium':1600,'high':3000,'ultra':6000}
 INSTALLED={t:True for t in REQUIREMENTS}
@@ -57,12 +54,15 @@ def test_user_consent_controls_cpu_ram_fallback():
 
 
 def test_gpu_probe_good_bad_and_timeout():
-    def ok(cmd,**kw):return SimpleNamespace(stdout='9000, 16384\n',returncode=0)
+    def ok(cmd,**kw):
+        return SimpleNamespace(stdout='9000, 16384\n',returncode=0)
     out=gpu_memory(runner=ok,executable='nvidia-smi')
     assert out['available'] and out['free_mib']==9000 and out['total_mib']==16384
-    def error(cmd,**kw):return SimpleNamespace(stdout='ERROR: driver',returncode=1)
+    def error(cmd,**kw):
+        return SimpleNamespace(stdout='ERROR: driver',returncode=1)
     assert gpu_memory(runner=error,executable='nvidia-smi')['available'] is False
-    def invalid(cmd,**kw):return SimpleNamespace(stdout='bad, data',returncode=0)
+    def invalid(cmd,**kw):
+        return SimpleNamespace(stdout='bad, data',returncode=0)
     assert gpu_memory(runner=invalid,executable='nvidia-smi')['available'] is False
     assert gpu_memory(executable='')['reason']=='nvidia-smi_not_found'
 
@@ -99,8 +99,10 @@ def test_model_domains_explicit_and_no_gpu_gpu_swap_semantics():
 
 class FakeChild:
     def __init__(self,name='child'):
-        self.name=name;self.closed=False
-    def close(self):self.closed=True
+        self.name=name
+        self.closed=False
+    def close(self):
+        self.closed=True
 
 
 def make_shell():
@@ -124,7 +126,8 @@ def make_shell():
 
 def test_video_releases_singing_before_loading_video(monkeypatch):
     shell=make_shell()
-    singer=FakeChild('singing');shell._singing_session=singer
+    singer=FakeChild('singing')
+    shell._singing_session=singer
     shell._resource_choice=lambda domain:{'state':'ready','quality':'high',
        'device':'cuda','preferred_quality':'ultra','reason':'vram_pressure_downshift'}
     order=[]
@@ -147,7 +150,8 @@ def test_video_no_cpu_fallback_without_user_permission():
 
 def test_music_route_never_calls_video_asr(monkeypatch):
     shell=make_shell()
-    prev=FakeChild('video');shell._lyrics_session=prev
+    prev=FakeChild('video')
+    shell._lyrics_session=prev
     shell._resource_choice=lambda domain:{'state':'ready','quality':'medium',
        'device':'cpu','preferred_quality':'ultra','reason':'vram_pressure_user_approved_cpu'}
     seen=[]
@@ -165,7 +169,8 @@ async def test_consent_action_rejects_false_confirmation_and_persists(monkeypatc
     shell._resource_cpu_consent={'video':False,'singing':False,'stem':False}
     shell._resource_lock=threading.RLock()
     shell._resource_probe=PressureTracker(2048)
-    saved=[];shell._save_preferences=lambda:saved.append(True)
+    saved=[]
+    shell._save_preferences=lambda:saved.append(True)
     denied=await shell.set_adaptive_resources(domain='singing',cpu_fallback=True,confirmed=False)
     assert not denied.value['ok'] and shell._resource_cpu_consent['singing'] is False
     allowed=await shell.set_adaptive_resources(domain='singing',cpu_fallback=True,

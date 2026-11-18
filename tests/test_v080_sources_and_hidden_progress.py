@@ -1,12 +1,11 @@
 """v0.8.0: pinned official/mirrors, real-bytes-only progress, resume and private UI."""
 from __future__ import annotations
-import hashlib
-import json
-import io
-from pathlib import Path
-from types import SimpleNamespace
 
-import pytest
+import hashlib
+import io
+import json
+from pathlib import Path
+
 from music_perception import lyrics_model_store as store
 from music_perception import runtime_environment as runtime
 
@@ -38,12 +37,18 @@ def test_download_stream_resumes_using_server_confirmed_range(tmp_path,monkeypat
     class Response:
         status=206
         headers={'Content-Range':'bytes 7-12/13'}
-        def __init__(self):self.buf=io.BytesIO(b'890123')
-        def __enter__(self):return self
-        def __exit__(self,*args):pass
-        def read(self,n):return self.buf.read(n)
-        def geturl(self):return 'https://trusted.example/content'
-        def getcode(self):return self.status
+        def __init__(self):
+            self.buf=io.BytesIO(b'890123')
+        def __enter__(self):
+            return self
+        def __exit__(self,*args):
+            pass
+        def read(self,n):
+            return self.buf.read(n)
+        def geturl(self):
+            return 'https://trusted.example/content'
+        def getcode(self):
+            return self.status
     def urlopen(req,timeout):
         events.append((req.headers,timeout))
         return Response()
@@ -59,12 +64,18 @@ def test_range_ignored_restarts_without_appending_corrupted_bytes(tmp_path,monke
     class Response:
         status=200
         headers={}
-        def __init__(self):self.buf=io.BytesIO(b'CLEAN COMPLETE')
-        def __enter__(self):return self
-        def __exit__(self,*a):pass
-        def read(self,n):return self.buf.read(n)
-        def geturl(self):return 'https://hf-mirror.com/valid'
-        def getcode(self):return 200
+        def __init__(self):
+            self.buf=io.BytesIO(b'CLEAN COMPLETE')
+        def __enter__(self):
+            return self
+        def __exit__(self,*a):
+            pass
+        def read(self,n):
+            return self.buf.read(n)
+        def geturl(self):
+            return 'https://hf-mirror.com/valid'
+        def getcode(self):
+            return 200
     monkeypatch.setattr(store.urllib.request,'urlopen',lambda *a,**kw:Response())
     store._stream_to_file('https://hf-mirror.com/valid',result,min_bytes=10)
     assert result.read_bytes()==b'CLEAN COMPLETE'
@@ -79,18 +90,27 @@ def test_direct_downloader_rejects_unsigned_weight_and_has_correct_file_names(tm
     class Response:
         status=200
         headers={}
-        def __init__(self,payload):self.stream=io.BytesIO(payload)
-        def __enter__(self):return self
-        def __exit__(self,*a):pass
-        def read(self,n):return self.stream.read(n)
-        def geturl(self):return 'https://cdn.example/allowed'
-        def getcode(self):return 200
+        def __init__(self,payload):
+            self.stream=io.BytesIO(payload)
+        def __enter__(self):
+            return self
+        def __exit__(self,*a):
+            pass
+        def read(self,n):
+            return self.stream.read(n)
+        def geturl(self):
+            return 'https://cdn.example/allowed'
+        def getcode(self):
+            return 200
     def urlopen(req,timeout):
         url=req.full_url
         records.append(url)
-        if 'model.bin' in url:return Response(payload)
-        if '.json' in url:return Response(json.dumps({'metadata':'good data'*4}).encode())
-        if '.txt' in url:return Response(b'TOKENIZER CONTENT LONG ENOUGH')
+        if 'model.bin' in url:
+            return Response(payload)
+        if '.json' in url:
+            return Response(json.dumps({'metadata':'good data'*4}).encode())
+        if '.txt' in url:
+            return Response(b'TOKENIZER CONTENT LONG ENOUGH')
         raise AssertionError(url)
     monkeypatch.setattr(store.urllib.request,'urlopen',urlopen)
     folder=store._download_direct_model('tiny',tmp_path,'https://hf-mirror.com')

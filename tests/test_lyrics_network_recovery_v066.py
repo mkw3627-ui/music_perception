@@ -1,20 +1,18 @@
 """No network or large model downloads: deterministic v0.6.7 regression tests."""
 from __future__ import annotations
+
 import asyncio
 import hashlib
 import json
-from pathlib import Path
 import time
+from pathlib import Path
 
-import numpy as np
 import pytest
-
 from music_perception import lyrics_model_store as store
-from music_perception.lyrics_bridge import LyricsModelDownloadError as BridgeDownloadError
-from music_perception.lyrics_bridge import PersistentLyricsSession
-from music_perception.lyrics_backend import transcribe_singing_candidate
 from music_perception.auto_listener import FinishedClip
-from test_lyrics_v063 import plugin_fixture, pcm
+from music_perception.lyrics_backend import transcribe_singing_candidate
+from music_perception.lyrics_bridge import LyricsModelDownloadError as BridgeDownloadError
+from test_lyrics_v063 import pcm
 
 
 @pytest.fixture
@@ -154,7 +152,6 @@ def test_resume_sharing_allows_immediate_model_retry(plugin_fixture):
 
 def test_config_mirror_switch_exposed(plugin_fixture):
     plugin,_,_,_=plugin_fixture
-    import inspect
     async def run():
         await plugin.startup()
         settings=await plugin._settings()

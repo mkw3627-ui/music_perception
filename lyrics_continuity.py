@@ -6,9 +6,10 @@ PCM nor lyric context can cross a song ID, an interrupted interval or consent
 revocation. All audio stays in volatile memory.
 """
 from __future__ import annotations
+
+import re
 from dataclasses import replace
 from difflib import SequenceMatcher
-import re
 
 
 def join_song_audio(clip, *, previous_tail, previous_sequence,
@@ -38,8 +39,10 @@ def join_song_audio(clip, *, previous_tail, previous_sequence,
                 high=None
             else:
                 want=int(round(prefix.size*rate/16000))
-                if abs(len(full_prefix)-want)>rate//4: high=None
-                else: high=np.concatenate([full_prefix[-want:],high])
+                if abs(len(full_prefix)-want)>rate//4:
+                    high=None
+                else:
+                    high=np.concatenate([full_prefix[-want:],high])
     enriched=replace(clip,samples=merged,offset_s=round(beginning,3),
                      full_band_samples=high)
     tail_count=int(min(max(overlap_seconds,0.),6)*16000)
@@ -64,16 +67,19 @@ def merge_song_lyrics(previous: list, incoming: list, *, limit=48) -> list:
     merged=[]
     for item in ordered:
         txt=normalized(item.get('text_preview'))
-        if not txt:continue
+        if not txt:
+            continue
         start=float(item['at_s'])
         best_idx=None
         for j in range(len(merged)-1,-1,-1):
             existing=merged[j]
-            if start-float(existing['at_s'])>2.4:break
+            if start-float(existing['at_s'])>2.4:
+                break
             old=normalized(existing.get('text_preview'))
             if old and (txt==old or (min(len(txt),len(old))>=4 and
                                        SequenceMatcher(None,txt,old).ratio()>=.80)):
-                best_idx=j;break
+                best_idx=j
+                break
         if best_idx is None:
             merged.append(item)
         else:

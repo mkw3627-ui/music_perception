@@ -6,6 +6,7 @@ and provide an A/B preview; a more expensive preset can sound worse on some
 music. Four different published ONNX weights, no silent downloads.
 """
 from __future__ import annotations
+
 from pathlib import Path
 
 # SHA-256 and file size sourced from the pinned published Hugging Face file
@@ -109,7 +110,8 @@ def verify_local_model(path: str | Path, quality: str) -> bool:
             return False
         digest=hashlib.sha256()
         with path.open('rb') as f:
-            for block in iter(lambda:f.read(4*1024*1024), b''):digest.update(block)
+            for block in iter(lambda:f.read(4*1024*1024), b''):
+                digest.update(block)
         return digest.hexdigest()==info['sha256']
     except OSError:
         return False

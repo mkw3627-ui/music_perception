@@ -7,17 +7,13 @@ from __future__ import annotations
 import asyncio
 import base64
 import io
-import json
-import math
-from pathlib import Path
-from types import SimpleNamespace
 import wave
+from pathlib import Path
 
 import numpy as np
 import pytest
-from music_perception import stem_catalog, stem_mdx, stem_postprocess, speech_timeline
-from music_perception.model_assets import remove_stem_model,remove_plugin_model_dir,model_plan
-from test_plugin import plugin_fixture
+from music_perception import speech_timeline, stem_catalog, stem_mdx, stem_postprocess
+from music_perception.model_assets import model_plan, remove_plugin_model_dir, remove_stem_model
 
 
 def test_four_models_have_distinct_pinned_weights_and_specific_shapes():
@@ -60,9 +56,12 @@ def test_four_profiles_construct_model_onnx_input_without_mismatch(tmp_path, mon
         name='input'
         shape=[1,4,item['dim_f'],256]
     class FakeSession:
-        def get_inputs(self):return [Input()]
-        def get_providers(self):return ['CPUExecutionProvider']
-        def run(self,names,feed):return [feed['input']]
+        def get_inputs(self):
+            return [Input()]
+        def get_providers(self):
+            return ['CPUExecutionProvider']
+        def run(self,names,feed):
+            return [feed['input']]
     engine=stem_mdx.TwoStemMDX(tmp_path/item['file'],session_factory=lambda *_:FakeSession())
     assert engine.fft==item['fft']
     times=np.arange(44100,dtype=np.float32)/44100
@@ -106,22 +105,26 @@ def test_lyrics_and_video_have_separate_pause_rules():
 
 
 def test_model_uninstall_does_not_touch_other_tiers(tmp_path):
-    root=tmp_path/'stems';root.mkdir()
+    root=tmp_path/'stems'
+    root.mkdir()
     for label in ('low','medium','high','ultra'):
         (root/stem_catalog.spec(label)['file']).write_bytes(label.encode())
     assert remove_stem_model(root,'high')['ok']
     assert not (root/stem_catalog.spec('high')['file']).exists()
     for label in ('low','medium','ultra'):
         assert (root/stem_catalog.spec(label)['file']).read_bytes()==label.encode()
-    with pytest.raises(ValueError):remove_stem_model(root,'../../../hi')
+    with pytest.raises(ValueError):
+        remove_stem_model(root,'../../../hi')
 
 
 def test_uninstall_reports_locked_directory_and_restores_when_possible(tmp_path, monkeypatch):
     import shutil
-    root=tmp_path/'whisper';directory=root/'small';directory.mkdir(parents=True)
+    root=tmp_path/'whisper'
+    directory=root/'small'
+    directory.mkdir(parents=True)
     (directory/'model.bin').write_bytes(b'fixed')
-    old=shutil.rmtree
-    def deny(path,*args,**kwargs):raise PermissionError('simulated Windows file lock')
+    def deny(path,*args,**kwargs):
+        raise PermissionError('simulated Windows file lock')
     monkeypatch.setattr(shutil,'rmtree',deny)
     result=remove_plugin_model_dir(root,'small')
     assert result['ok'] is False and result['bytes_removed']==0

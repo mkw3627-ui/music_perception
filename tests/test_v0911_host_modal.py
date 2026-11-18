@@ -4,7 +4,8 @@ Tests inspect the compiled panel's host integration contract. Visual/scroll
 behavior has separate Chromium fixture; N.E.K.O Windows host still needs QA.
 """
 from pathlib import Path
-from _version import ui_build, panel_ui_build, plugin_version  # noqa: E402
+
+from _version import ui_build  # noqa: E402
 
 ROOT=Path(__file__).resolve().parents[1]
 

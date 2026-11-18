@@ -7,14 +7,14 @@ from __future__ import annotations
 
 import json
 import os
-import re
-import time
-from pathlib import Path
 import queue
+import re
 import struct
 import subprocess
 import sys
 import threading
+import time
+from pathlib import Path
 
 _HEADER = struct.Struct('!I')
 _MAX_META = 4096
@@ -74,24 +74,32 @@ class PersistentStemSession:
             try:
                 while True:
                     length_data = child.stdout.read(4)
-                    if not length_data: break
-                    if len(length_data)!=4: raise StemWorkerError('incomplete response header')
+                    if not length_data:
+                        break
+                    if len(length_data)!=4:
+                        raise StemWorkerError('incomplete response header')
                     meta_size, = _HEADER.unpack(length_data)
-                    if not 1<=meta_size<=_MAX_META: raise StemWorkerError('invalid response size')
+                    if not 1<=meta_size<=_MAX_META:
+                        raise StemWorkerError('invalid response size')
                     response = json.loads(_read_exact(child.stdout,meta_size).decode('utf-8'))
                     if response.get('ok'):
                         count = (int(response.get('voice_frames',0)) + int(response.get('enhanced_frames',0)) + int(response.get('instrument_frames',0)))*4
-                        if not 0<count<=_MAX_PCM: raise StemWorkerError('invalid response PCM size')
+                        if not 0<count<=_MAX_PCM:
+                            raise StemWorkerError('invalid response PCM size')
                         payload = _read_exact(child.stdout,count)
                     else:
                         payload = b''
                     self._replies.put((response,payload),timeout=2)
             except Exception as exc:
-                try:self._replies.put_nowait(exc)
-                except queue.Full:pass
+                try:
+                    self._replies.put_nowait(exc)
+                except queue.Full:
+                    pass
             finally:
-                try:self._replies.put_nowait(None)
-                except queue.Full:pass
+                try:
+                    self._replies.put_nowait(None)
+                except queue.Full:
+                    pass
         threading.Thread(target=reader,name='neko-stem-reader',daemon=True).start()
 
     def separate(self, stereo, *, rate=48000, gpu=False, cpu_fallback=True, strength='balanced'):
@@ -106,10 +114,13 @@ class PersistentStemSession:
         data = np.asarray(stereo,dtype='<f4')
         if data.ndim != 2 or data.shape[1]!=2 or rate not in (16000,44100,48000) or not rate<=len(data)<=rate*32:
             raise StemWorkerError('分离要求1至32秒的双声道音乐片段')
-        if not np.isfinite(data).all(): raise StemWorkerError('invalid PCM')
+        if not np.isfinite(data).all():
+            raise StemWorkerError('invalid PCM')
         with self._call_lock:
-            if self._closed: raise StemWorkerError('分离子进程已关闭')
-            if self._child is None: self._start()
+            if self._closed:
+                raise StemWorkerError('分离子进程已关闭')
+            if self._child is None:
+                self._start()
             if self._child.poll() is not None:
                 self.close()
                 raise StemWorkerError('分离子进程已退出')
@@ -187,16 +198,25 @@ class PersistentStemSession:
         child,self._child=self._child,None
         if child is not None:
             if child.poll() is None:
-                try: child.terminate(); child.wait(timeout=1)
+                try:
+                    child.terminate()
+                    child.wait(timeout=1)
                 except (subprocess.TimeoutExpired,OSError):
-                    try: child.kill();child.wait(timeout=1)
-                    except OSError:pass
+                    try:
+                        child.kill()
+                        child.wait(timeout=1)
+                    except OSError:
+                        pass
             for pipe in (child.stdin,child.stdout):
-                try:pipe.close()
-                except (OSError,ValueError,AttributeError):pass
+                try:
+                    pipe.close()
+                except (OSError,ValueError,AttributeError):
+                    pass
             if self.on_process:
-                try:self.on_process(None)
-                except Exception:pass
+                try:
+                    self.on_process(None)
+                except Exception:
+                    pass
 
     @property
     def running(self):

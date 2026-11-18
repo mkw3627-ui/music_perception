@@ -11,8 +11,8 @@ perfect: vocals can bleed into accompaniment and vice versa.
 """
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
+
 from .stem_catalog import STEM_PROFILES, verify_local_model
 
 MODEL_FILENAME = 'UVR-MDX-NET-Inst_HQ_3.onnx'
@@ -111,7 +111,8 @@ class TwoStemMDX:
                 # ORT GPU >= 1.21 can locate compatible CUDA/cuDNN DLLs without
                 # changing system PATH or the host N.E.K.O process.
                 try:
-                    import contextlib, sys
+                    import contextlib
+                    import sys
                     # Native ORT may print warnings. On the binary stem-worker
                     # protocol stdout is RESERVED for framed PCM responses.
                     with contextlib.redirect_stdout(sys.stderr):
@@ -167,9 +168,10 @@ class TwoStemMDX:
         self.device = 'cuda' if 'CUDAExecutionProvider' in active else 'cpu'
 
     def separate(self, pcm, sample_rate: int, *, strength='balanced'):
+        from math import gcd
+
         import numpy as np
         from scipy.signal import resample_poly
-        from math import gcd
         if type(sample_rate) is not int or sample_rate not in (16000, 44100, 48000):
             raise StemError('Unsupported stem input sample rate')
         data = np.asarray(pcm, dtype=np.float32)
@@ -184,10 +186,6 @@ class TwoStemMDX:
             mix = data.copy()
         sample_count = len(mix)
         predicted = np.empty_like(mix)
-        n_fft=self.model_record['n_fft']
-        dim_f=self.model_record['dim_f']
-        trim=n_fft//2
-        stride=CHUNK-2*trim
         # Never silently discard the last partial chunk. Padding and de-padding
         # preserve a strict sample-accurate timeline across the two stems.
         for start in range(0, sample_count, self.stride):

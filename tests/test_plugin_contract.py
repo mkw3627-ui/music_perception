@@ -20,10 +20,12 @@ def build_plugin(monkeypatch, tmp_path, *, music_roots=None):
         return lambda func: func
 
     class Ok:
-        def __init__(self, value): self.value = value
+        def __init__(self, value):
+            self.value = value
 
     class FakeBase:
-        def data_path(self, name): return tmp_path / "data" / name
+        def data_path(self, name):
+            return tmp_path / "data" / name
         def push_message(self, **kw):
             self.sent.append(kw)
             return {"submitted": True}
@@ -61,7 +63,8 @@ def build_plugin(monkeypatch, tmp_path, *, music_roots=None):
     plugin.logger = logging.getLogger("test-music-perception")
     cfg = {"music_perception": {"allowed_roots": [str(x) for x in (music_roots or [])],
                                 "segment_seconds": 4, "max_seconds": 300}}
-    async def dump(timeout): return cfg
+    async def dump(timeout):
+        return cfg
     plugin.config = SimpleNamespace(dump=dump)
     return plugin, Ok
 

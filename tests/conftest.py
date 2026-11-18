@@ -1,8 +1,11 @@
 """Small N.E.K.O SDK double, so local tests don't require the N.E.K.O host."""
 from __future__ import annotations
+
 import sys
 import types
 from pathlib import Path
+
+import pytest
 
 # Allow `python -m pytest tests -q` directly inside the plugin folder.
 _SOURCE_PARENT = str(Path(__file__).resolve().parents[2])
@@ -45,7 +48,6 @@ if "plugin.sdk.plugin" not in sys.modules:
 
 # Legacy audio-analysis tests exercise business logic, not package downloads.
 # Isolate them from the network and from the runtime bootstrap.
-import pytest
 
 
 class ReadyTestEnvironment:
@@ -84,3 +86,14 @@ def _no_real_audible_scanner(monkeypatch, request):
     import music_perception
     monkeypatch.setattr(music_perception.MusicPerceptionPlugin,
                         '_start_audible_scanner', lambda self: None)
+
+
+
+# 许多旧测试共用 test_plugin.py 里的插件夹具。放在 conftest 里统一提供，
+# 这样各测试文件不必再 `from test_plugin import plugin_fixture`（ruff 会把那种
+# 只按名字注入的导入当成未使用删掉）。
+@pytest.fixture
+def plugin_fixture(tmp_path):
+    from test_plugin import make_plugin_fixture
+
+    yield from make_plugin_fixture(tmp_path)

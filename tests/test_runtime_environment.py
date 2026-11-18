@@ -1,14 +1,12 @@
 """Runtime bootstrap tests: intentionally offline; never call pip or PyPI."""
 from __future__ import annotations
 
-from pathlib import Path
 import importlib.util
-import os
-import threading
 import tomllib
+from pathlib import Path
 
 import pytest
-from _version import ui_build, panel_ui_build, plugin_version  # noqa: E402
+from _version import plugin_version  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('local_runtime_environment', ROOT / 'runtime_environment.py')
@@ -174,7 +172,8 @@ def test_model_file_rejects_truncated_and_html(tmp_path):
 
 def test_installer_uses_target_and_binary_only(monkeypatch, tmp_path):
     env = boot(tmp_path)
-    stage = env.data / 'scratch'; stage.mkdir()
+    stage = env.data / 'scratch'
+    stage.mkdir()
     seen = {}
     monkeypatch.setattr(module.shutil, 'which', lambda name: 'C:/mock/uv.exe' if name == 'uv' else None)
     class FakeChild:
@@ -182,7 +181,8 @@ def test_installer_uses_target_and_binary_only(monkeypatch, tmp_path):
             seen['argv'] = argv
             seen['cwd'] = kw['cwd']
             self.returncode = 0
-        def poll(self): return 0
+        def poll(self):
+            return 0
     monkeypatch.setattr(module.subprocess, 'Popen', FakeChild)
     monkeypatch.setattr(env, '_probe', lambda location, specs: None)
     env._install(stage, module.requirements_from_manifest(ROOT))
@@ -200,8 +200,10 @@ def test_bootstrap_module_has_no_thirdparty_imports_at_module_scope():
         content = ast.parse((ROOT / file).read_text(encoding='utf8'))
         names = []
         for node in content.body:
-            if isinstance(node, ast.Import): names += [alias.name for alias in node.names]
-            if isinstance(node, ast.ImportFrom): names.append(node.module or '')
+            if isinstance(node, ast.Import):
+                names += [alias.name for alias in node.names]
+            if isinstance(node, ast.ImportFrom):
+                names.append(node.module or '')
         assert not any(n in {'numpy', 'scipy', 'librosa', 'soundfile', 'soundcard', 'soxr', 'ai_edge_litert'} for n in names)
 
 
@@ -257,7 +259,8 @@ def test_interrupted_update_prefers_last_known_good_backup(monkeypatch, tmp_path
     env = boot(tmp_path)
     broken = env.data / 'vendor'
     backup = env.data / '.vendor.previous'
-    broken.mkdir(); backup.mkdir()
+    broken.mkdir()
+    backup.mkdir()
     (broken / 'bad').write_text('corrupt')
     (backup / 'good').write_text('usable')
     patch_platform(monkeypatch, env)
@@ -274,7 +277,8 @@ def test_corrupt_vendor_and_backup_do_not_block_new_repair(monkeypatch, tmp_path
     env = boot(tmp_path)
     broken = env.data / 'vendor'
     backup = env.data / '.vendor.previous'
-    broken.mkdir(); backup.mkdir()
+    broken.mkdir()
+    backup.mkdir()
     (backup / 'old').write_text('forensics')
     patch_platform(monkeypatch, env)
     monkeypatch.setattr(env, '_probe', lambda path, _: (
@@ -291,7 +295,8 @@ def test_corrupt_vendor_and_backup_do_not_block_new_repair(monkeypatch, tmp_path
 
 def test_uv_exit_2_automatically_falls_back_to_pip(monkeypatch, tmp_path):
     env = boot(tmp_path)
-    stage = env.data / 'temp'; stage.mkdir()
+    stage = env.data / 'temp'
+    stage.mkdir()
     monkeypatch.setattr(module.shutil, 'which', lambda name: 'old-uv' if name == 'uv' else None)
     attempts = []
 
@@ -318,7 +323,8 @@ def test_uv_exit_2_automatically_falls_back_to_pip(monkeypatch, tmp_path):
 
 def test_uv_exit_zero_but_native_import_fails_then_pip_retries(monkeypatch, tmp_path):
     env = boot(tmp_path)
-    stage = env.data / 'temp'; stage.mkdir()
+    stage = env.data / 'temp'
+    stage.mkdir()
     monkeypatch.setattr(module.shutil, 'which', lambda _: 'uv')
     installers = []
 
@@ -340,7 +346,8 @@ def test_uv_exit_zero_but_native_import_fails_then_pip_retries(monkeypatch, tmp_
 
 def test_both_installers_fail_with_actual_errors_and_preserve_vendor(monkeypatch, tmp_path):
     env = boot(tmp_path)
-    vendor = env.data / 'vendor'; vendor.mkdir()
+    vendor = env.data / 'vendor'
+    vendor.mkdir()
     (vendor / 'prior').write_text('keep')
     monkeypatch.setattr(module.shutil, 'which', lambda _: 'uv')
     patch_platform(monkeypatch, env)
@@ -370,7 +377,8 @@ def test_private_credentials_and_user_names_redacted():
 
 def test_no_uv_uses_only_pip(monkeypatch, tmp_path):
     env = boot(tmp_path)
-    stage = env.data / 'temp'; stage.mkdir()
+    stage = env.data / 'temp'
+    stage.mkdir()
     monkeypatch.setattr(module.shutil, 'which', lambda _: None)
     called = []
     monkeypatch.setattr(env, '_attempt_install', lambda cmd, **kw: (called.append(cmd) or (0, 'ok')))
@@ -382,7 +390,8 @@ def test_no_uv_uses_only_pip(monkeypatch, tmp_path):
 
 def test_shutdown_interrupts_install_without_fallback(monkeypatch, tmp_path):
     env = boot(tmp_path)
-    stage = env.data / 'temp'; stage.mkdir()
+    stage = env.data / 'temp'
+    stage.mkdir()
     monkeypatch.setattr(module.shutil, 'which', lambda _: 'uv')
     calls = []
 

@@ -1,10 +1,10 @@
 """No-network simulations of the real packaged N.E.K.O / Nuitka failure."""
-from pathlib import Path
 import sys
-import pytest
+from pathlib import Path
 
-from music_perception import runtime_environment as rt
+import pytest
 from music_perception import install_prepare as builder
+from music_perception import runtime_environment as rt
 
 
 def fake_python(tmp_path):
@@ -49,7 +49,8 @@ def test_frozen_exe_skipped_and_uv_prepares_private_matching_python(monkeypatch,
 
 
 def test_existing_external_python_avoids_install(monkeypatch, tmp_path):
-    packaged = tmp_path / 'projectneko_server.exe'; packaged.write_text('frozen')
+    packaged = tmp_path / 'projectneko_server.exe'
+    packaged.write_text('frozen')
     python = fake_python(tmp_path)
     seen = []
     def run(self, c, *, timeout=15, env=None):
@@ -67,7 +68,8 @@ def test_existing_external_python_avoids_install(monkeypatch, tmp_path):
 
 
 def test_no_python_no_uv_falls_back_to_portable_never_calls_packaged_exe(monkeypatch, tmp_path):
-    packaged = tmp_path / 'projectneko_server.exe'; packaged.write_text('frozen')
+    packaged = tmp_path / 'projectneko_server.exe'
+    packaged.write_text('frozen')
     monkeypatch.setattr(rt.sys,'executable',str(packaged))
     monkeypatch.setattr(rt.shutil,'which',lambda x: None)
     monkeypatch.setattr(rt.PythonResolver,'_run', lambda *a, **k: pytest.fail('must not spawn packaged app'))
@@ -83,9 +85,12 @@ def test_portable_python_rejects_wrong_sha_and_never_extracts(monkeypatch, tmp_p
         pytest.skip('portable CPython is Windows only')
 
     class Reply(io.BytesIO):
-        def geturl(self): return 'https://mirror.example/python.tar.gz'
-        def __enter__(self): return self
-        def __exit__(self, *a): return False
+        def geturl(self):
+            return 'https://mirror.example/python.tar.gz'
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            return False
     monkeypatch.setattr(rt.urllib.request,'urlopen', lambda *a, **k: Reply(b'not the pinned archive'))
     monkeypatch.setattr(rt.PythonResolver,'_validate', lambda self, c: False)
     resolver = rt.PythonResolver(tmp_path / 'private')
@@ -117,11 +122,13 @@ def test_real_interpreter_is_validated_without_network(tmp_path):
 
 
 def test_build_preparation_uses_resolved_python_for_all_probes(monkeypatch, tmp_path):
-    src=tmp_path/'music_perception'; src.mkdir()
+    src=tmp_path/'music_perception'
+    src.mkdir()
     root=Path(__file__).resolve().parents[1]
     for name in ('plugin.toml','pyproject.toml'):
         (src/name).write_bytes((root/name).read_bytes())
-    real = tmp_path/'python.exe'; real.touch()
+    real = tmp_path/'python.exe'
+    real.touch()
     monkeypatch.setattr(rt.PythonResolver,'resolve', lambda self: str(real))
     monkeypatch.setattr(builder, 'download_yamnet',lambda *a:'fake-model')
     monkeypatch.setattr(builder.shutil,'which', lambda x: 'uv' if x == 'uv' else None)
@@ -144,7 +151,8 @@ def test_runtime_uses_validated_python_in_install_and_native_probe(monkeypatch,t
     monkeypatch.setattr(rt.shutil, 'which', lambda x:'uv' if x=='uv' else None)
     monkeypatch.setattr(env, '_attempt_install', lambda cmd, *,deadline: (commands.append(cmd) or (0,'ok')))
     monkeypatch.setattr(env, '_probe',lambda *a: None)
-    stage=tmp_path/'staging'; stage.mkdir()
+    stage=tmp_path/'staging'
+    stage.mkdir()
     env._install(stage,rt.requirements_from_manifest(env.source))
     assert commands[0][commands[0].index('--python')+1] == env._python_path
 

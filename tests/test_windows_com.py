@@ -2,16 +2,14 @@
 from __future__ import annotations
 
 import builtins
-import sys
 import threading
 import time
 import types
 
+import music_perception.auto_listener as listener_module
 import numpy as np
 import pytest
-
-import music_perception.auto_listener as listener_module
-from music_perception.auto_listener import ListenerError, LiveListener, SoundCardLoopback, Decision
+from music_perception.auto_listener import Decision, ListenerError, LiveListener, SoundCardLoopback
 
 
 class FakeOle32:

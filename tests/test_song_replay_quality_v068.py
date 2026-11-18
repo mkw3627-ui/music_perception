@@ -1,11 +1,16 @@
 """v0.6.8: track isolation, replay reuse, quality selection and newest-song AI scope."""
 from __future__ import annotations
+
 import asyncio
 import json
+
 import numpy as np
-from music_perception.song_memory import RecentSongMemory,trusted_song_identity,QUALITY_MODEL,audio_segment_fingerprint
 from music_perception.auto_listener import FinishedClip
-from test_plugin import plugin_fixture
+from music_perception.song_memory import (
+    RecentSongMemory,
+    audio_segment_fingerprint,
+    trusted_song_identity,
+)
 
 
 def metadata(title,artist='Composer',duration=193,source='windows_smtc'):
@@ -85,7 +90,8 @@ def test_reused_segment_skips_expensive_music_analysis_and_lyrics_asr(plugin_fix
     plugin,_,_,_=plugin_fixture
     async def check():
         await plugin.startup()
-        plugin._auto_consented=True;plugin._ai_delivery=True
+        plugin._auto_consented=True
+        plugin._ai_delivery=True
         plugin._singing_profile='low'
         plugin._listener_session=3
         plugin._track_identity=trusted_song_identity(metadata('Song A'))
@@ -126,9 +132,11 @@ def test_ai_this_song_prefers_newest_and_never_old_stale_context(plugin_fixture)
     plugin,_,_,_=plugin_fixture
     async def check():
         await plugin.startup()
-        plugin._auto_consented=True;plugin._ai_delivery=True
+        plugin._auto_consented=True
+        plugin._ai_delivery=True
         plugin._listener_session=4
-        async def no_refresh():return None
+        async def no_refresh():
+            return None
         plugin._refresh_player_track=no_refresh
         plugin._track_identity=trusted_song_identity(metadata('Previous'))
         plugin._track_display_name='Previous'
@@ -154,8 +162,8 @@ def test_ai_this_song_prefers_newest_and_never_old_stale_context(plugin_fixture)
 
 
 def test_high_tier_uses_official_multilingual_small_not_english_only():
-    from music_perception.lyrics_model_store import MODELS
     from music_perception.lyrics_backend import _make_model
+    from music_perception.lyrics_model_store import MODELS
     assert MODELS['small']['repo']=='Systran/faster-whisper-small'
     assert MODELS['small']['sha256']=='3e305921506d8872816023e4c273e75d2419fb89b24da97b4fe7bce14170d671'
     calls=[]
@@ -171,7 +179,8 @@ def test_changed_tier_invalidates_old_results_in_flight(plugin_fixture):
     plugin,_,_,_=plugin_fixture
     async def check():
         await plugin.startup()
-        plugin._auto_consented=True;plugin._ai_delivery=True
+        plugin._auto_consented=True
+        plugin._ai_delivery=True
         plugin._listener_session=1
         plugin._on_track_boundary('track_started',1)
         before=plugin._lyrics_quality_generation
@@ -212,9 +221,11 @@ def test_latest_song_query_rejects_scene_with_same_sequence_but_old_song_id(plug
     plugin,_,_,_=plugin_fixture
     async def check():
         await plugin.startup()
-        plugin._auto_consented=True; plugin._ai_delivery=True
+        plugin._auto_consented=True
+        plugin._ai_delivery=True
         plugin._listener_session=1
-        async def no_refresh(): return None
+        async def no_refresh():
+            return None
         plugin._refresh_player_track=no_refresh
         plugin._track_identity=trusted_song_identity(metadata('Track with distinct ID'))
         plugin._track_display_name='Track with distinct ID'
@@ -237,7 +248,8 @@ def test_quality_change_private_notice_is_not_false_song_change(plugin_fixture):
     plugin,_,_,_=plugin_fixture
     async def check():
         await plugin.startup()
-        plugin._auto_consented=True; plugin._ai_delivery=True
+        plugin._auto_consented=True
+        plugin._ai_delivery=True
         receipts=[]
         plugin.push_message=lambda **kw: receipts.append(kw) or {'submitted':True}
         plugin._invalidate_pending_ai_music('lyrics_quality_changed')
@@ -277,7 +289,8 @@ def test_rejected_model_change_keeps_active_ai_history(plugin_fixture):
     plugin,_,_,_=plugin_fixture
     async def check():
         await plugin.startup()
-        plugin._auto_consented=True;plugin._ai_delivery=True
+        plugin._auto_consented=True
+        plugin._ai_delivery=True
         plugin._song_boundary_enforced=False
         plugin._recent_auditory_context={'music_capture':{'music_sequence':1},
             'lyrics_understanding':{'timed_cues':[{'text_preview':'base result'}]},

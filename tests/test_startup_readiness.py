@@ -10,10 +10,9 @@ import threading
 import time
 import tomllib
 from pathlib import Path
-from types import SimpleNamespace
 
 import music_perception as plugin_module
-from _version import ui_build, panel_ui_build, plugin_version  # noqa: E402
+from _version import plugin_version  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 

@@ -4,6 +4,7 @@ Source ASR timestamps remain unchanged. Musical beats are descriptive
 alignment, never a forced quantization of spoken/sung syllables.
 """
 from __future__ import annotations
+
 import bisect
 import math
 
@@ -27,8 +28,10 @@ def _word_join(previous: str, next_text: str) -> str:
     remain on source cues; grouping is ONLY a UI/AI presentation hint.
     """
     previous, next_text = previous.rstrip(), next_text.lstrip()
-    if not previous: return next_text
-    if not next_text: return previous
+    if not previous:
+        return next_text
+    if not next_text:
+        return previous
     if next_text[0] in ',.!?;:，。！？；：、' or previous[-1] in '（("“‘':
         return previous + next_text
     if '\u4e00' <= previous[-1] <= '\u9fff' or '\u4e00' <= next_text[0] <= '\u9fff':
@@ -48,7 +51,10 @@ def _group_cues(cues, beats, *, bar_beats=4):
     # beat subdivisions. A slow 3/4 ballad must not require a 2.4s pause
     # before it can break a lyric sentence.
     pause_cutoff=1.1
-    group=-1; prev_end=None; prev_text=''; prev_start=None
+    group=-1
+    prev_end=None
+    prev_text=''
+    prev_start=None
     for row in rows:
         at=max(0.,_finite(row.get('at_s')))
         end=max(at,_finite(row.get('end_s'),at))
@@ -64,7 +70,8 @@ def _group_cues(cues, beats, *, bar_beats=4):
         long_phrase=(prev_start is not None and at-prev_start>13 and clause_pause)
         boundary=prev_end is None or explicit_end or at_pause or clause_pause or long_phrase
         if boundary:
-            group+=1;prev_start=at
+            group+=1
+            prev_start=at
         row['phrase_index']=group
         row['line_break_before']=bool(boundary)
         row['line_break_reason']=('first' if prev_end is None else
@@ -97,7 +104,8 @@ def build_music_lines(cues, beats=(), *, limit=48):
     for item in rows:
         phrase=item.get('phrase_index',0)
         text=str(item.get('text_preview') or item.get('text_candidate') or '').strip()
-        if not text:continue
+        if not text:
+            continue
         if not lines or phrase!=lines[-1]['phrase_index']:
             lines.append({'phrase_index':phrase,
                 'at_s':item.get('at_s',0), 'end_s':item.get('end_s',item.get('at_s',0)),
@@ -142,7 +150,8 @@ def annotate_video_evidence(cues, *, repeat_min=3):
     counts={}
     for row in rows:
         key=_norm_text(row.get('text_candidate') or row.get('text_preview'))
-        if key: counts[key]=counts.get(key,0)+1
+        if key:
+            counts[key]=counts.get(key,0)+1
     suspects=0
     for row in rows:
         raw=str(row.get('text_candidate') or row.get('text_preview') or '')
@@ -169,7 +178,6 @@ def video_sentences(cues, *, pause_split_s=1.8):
         at=max(0,_finite(row.get('at_s')))
         end=max(at,_finite(row.get('end_s'),at))
         gap=at-prev_end if prev_end is not None else None
-        text=str(row.get('text_candidate') or row.get('text_preview') or '')
         if prev_end is None or (gap is not None and gap>=pause_split_s):
             groups+=1
         row['speech_section']=groups

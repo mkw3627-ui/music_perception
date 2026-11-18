@@ -34,9 +34,12 @@ def chord_change_candidates(chroma, *, sample_rate: int, hop_length: int,
         v=np.mean(unit,axis=1)
         norm=float(np.linalg.norm(v))
         if norm < 1e-5:
-            labels.append(None);scores.append(0.0);continue
+            labels.append(None)
+            scores.append(0.0)
+            continue
         sims=template_matrix@(v/(norm+1e-7))
-        best=int(np.argmax(sims)); sorted_sims=np.sort(sims)
+        best=int(np.argmax(sims))
+        sorted_sims=np.sort(sims)
         margin=float(sorted_sims[-1]-sorted_sims[-2])
         # Template matches compete across nearby harmonies. Short/noisy
         # fragments must be allowed to remain unknown.
@@ -54,7 +57,8 @@ def chord_change_candidates(chroma, *, sample_rate: int, hop_length: int,
     for i,label in enumerate(smoothed):
         start=round(i*length*hop_length/sample_rate,3)
         end=round(min(duration,(i+1)*length*hop_length/sample_rate),3)
-        if end<=start:continue
+        if end<=start:
+            continue
         if segments and label==segments[-1]['label']:
             segments[-1]['end_s']=end
             segments[-1]['confidence']=round((segments[-1]['confidence']+scores[i])/2,3)
@@ -86,16 +90,21 @@ def beat_accent_candidates(beats, onset_envelope, *, sample_rate: int,
     picked=[]
     for t in beats:
         i=int(round(float(t)*sample_rate/hop_length))
-        a=max(0,i-2);b=min(len(onsets),i+3)
-        if b<=a:continue
+        a=max(0,i-2)
+        b=min(len(onsets),i+3)
+        if b<=a:
+            continue
         picked.append((float(t),float(np.max(onsets[a:b]))))
-    if not picked:return {'status':'insufficient_beats','events':[]}
-    levels=np.array([v for _,v in picked]); median=float(np.median(levels))
+    if not picked:
+        return {'status':'insufficient_beats','events':[]}
+    levels=np.array([v for _,v in picked])
+    median=float(np.median(levels))
     spread=float(np.std(levels))
     floor=median+0.55*spread
     events=[]
     for i,(at,level) in enumerate(picked):
-        if level<=floor or level<=0.03: continue
+        if level<=floor or level<=0.03:
+            continue
         # This is a prominent beat, NOT necessarily the first beat in a bar.
         events.append({'type':'beat_accent_candidate','at_s':round(at,3),
                        'relative_strength':round(min(2.,level/max(median,1e-5)),2),
@@ -124,16 +133,19 @@ def metrical_grouping_candidates(beats, accent_data: dict, *, max_events=28) -> 
     strengths=np.asarray([accent_times.get(round(t,2),1.0) for t in times])
     best=None
     for meter in (3,4):
-        if len(times)<meter*3:continue
+        if len(times)<meter*3:
+            continue
         for phase in range(meter):
             indexes=np.arange(len(times))
             a=strengths[(indexes-phase)%meter==0]
             b=strengths[(indexes-phase)%meter!=0]
-            if len(a)<3 or not len(b):continue
+            if len(a)<3 or not len(b):
+                continue
             diff=float(np.mean(a)-np.mean(b))
             # Normalized contrast in [0,1], not a probability.
             score=diff/(float(np.mean(strengths))+1e-7)
-            if best is None or score>best[0]:best=(score,meter,phase)
+            if best is None or score>best[0]:
+                best=(score,meter,phase)
     if best is None or best[0]<.28:
         return {'status':'no_reliable_meter','meter_candidate':None,'events':[]}
     score,meter,phase=best

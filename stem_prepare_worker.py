@@ -5,12 +5,13 @@ untrusted network cannot decide the model hash or destination.  Progress and
 errors are written to plugin-owned JSON, never host logs with private data.
 """
 from __future__ import annotations
+
 import json
 import os
-from pathlib import Path
 import sys
 import time
 import uuid
+from pathlib import Path
 
 
 def _write_status(path:Path, **fields):
@@ -27,8 +28,10 @@ def _write_status(path:Path, **fields):
         except OSError:
             time.sleep(.05*(attempt+1))
         finally:
-            try:temp.unlink(missing_ok=True)
-            except OSError:pass
+            try:
+                temp.unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 def source_urls(priority, quality='ultra'):
@@ -44,8 +47,10 @@ def source_urls(priority, quality='ultra'):
         sources=[('Hugging Face 官方','https://huggingface.co'+file),
                  ('HF-Mirror 公益镜像','https://hf-mirror.com'+file),
                  ('HF-Mirror 备用节点','https://hf-mirror.net'+file)]
-        if priority=='mirror':return [modelscope,sources[1],sources[2],sources[0]]
-        if priority=='official':return sources+[modelscope]
+        if priority=='mirror':
+            return [modelscope,sources[1],sources[2],sources[0]]
+        if priority=='official':
+            return sources+[modelscope]
         raise ValueError('无效下载来源')
     try:
         from .stem_catalog import urls_for
@@ -56,7 +61,8 @@ def source_urls(priority, quality='ultra'):
 
 def main(argv=None):
     args = list(argv if argv is not None else sys.argv[1:])
-    if len(args) not in (3,4):return 2
+    if len(args) not in (3,4):
+        return 2
     model_dir,status_path,priority=args[:3]
     quality=args[3] if len(args)==4 else 'ultra'
     # All allowed destinations, hashes and URLs are defined by our catalogue.
@@ -67,8 +73,8 @@ def main(argv=None):
     directory=Path(model_dir)
     target=directory/filename
     status_file=Path(status_path)
-    from lyrics_model_store import _stream_to_file
     from download_telemetry import TransferMeter
+    from lyrics_model_store import _stream_to_file
     directory.mkdir(parents=True,exist_ok=True)
     if verify_local_model(target,quality):
         _write_status(status_file,state='ready',stage='sha256_verified',pct=100,

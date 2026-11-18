@@ -5,15 +5,15 @@ only; never edits host, system Python or a vendor with loaded native DLLs.
 Download failed? Keep old working environment and never capture mixed audio.
 """
 from __future__ import annotations
+
 import json
 import os
-from pathlib import Path
-import sys
 import shutil
 import subprocess
+import sys
 import threading
-import time
 import uuid
+from pathlib import Path
 
 PACKAGE = 'proc-tap==1.1.1'
 PINNED_VERSION = '1.1.1'
@@ -62,7 +62,8 @@ class ProcessCaptureInstaller:
                     directory.is_dir() and (directory/'.neko-process-capture-ready').is_file()
                     and any((directory/'proctap').rglob('*.pyd'))):
                 return directory
-        except (OSError,ValueError,TypeError):pass
+        except (OSError,ValueError,TypeError):
+            pass
         return None
 
     def installed(self):
@@ -170,6 +171,9 @@ class ProcessCaptureInstaller:
                 self._state={'state':'failed','running':False,'ready':self.installed(),
                              'message':f'{type(exc).__name__}: {str(exc)[:320]}'}
         finally:
-            if not committed and stage.exists(): shutil.rmtree(stage,ignore_errors=True)
-            try: (self.root / 'proc_tap_locked_requirements.txt').unlink(missing_ok=True)
-            except OSError: pass
+            if not committed and stage.exists():
+                shutil.rmtree(stage,ignore_errors=True)
+            try:
+                (self.root / 'proc_tap_locked_requirements.txt').unlink(missing_ok=True)
+            except OSError:
+                pass

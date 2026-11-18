@@ -17,11 +17,16 @@ class FakeResponse:
         self.content = io.BytesIO(payload)
         self.status = status
         self.headers = headers or {}
-    def __enter__(self):return self
-    def __exit__(self,*_):return False
-    def read(self,n):return self.content.read(n)
-    def geturl(self):return 'https://hf-mirror.com/trusted/weights'
-    def getcode(self):return self.status
+    def __enter__(self):
+        return self
+    def __exit__(self,*_):
+        return False
+    def read(self,n):
+        return self.content.read(n)
+    def geturl(self):
+        return 'https://hf-mirror.com/trusted/weights'
+    def getcode(self):
+        return self.status
 
 
 def test_truncated_99_percent_keeps_partial_and_next_request_resumes(tmp_path,monkeypatch):
@@ -119,12 +124,14 @@ def test_previous_build_unverified_model_bin_is_reused_as_range_partial(tmp_path
     cutoff=len(payload)-60
     original=store.MODELS['tiny']
     monkeypatch.setitem(store.MODELS,'tiny',dict(original,min_bytes=80,sha256=hashlib.sha256(payload).hexdigest()))
-    folder=tmp_path/'tiny';folder.mkdir()
+    folder=tmp_path/'tiny'
+    folder.mkdir()
     (folder/'model.bin').write_bytes(payload[:cutoff])
     for filename in store.REQUIRED_FILES['tiny']:
         if filename.endswith('.json'):
             (folder/filename).write_text('{"metadata":"safe bundled test"}')
-        else:(folder/filename).write_bytes(b'TOKENIZER FILE LONG ENOUGH')
+        else:
+            (folder/filename).write_bytes(b'TOKENIZER FILE LONG ENOUGH')
     requests=[]
     def fetch(req,timeout=25):
         requests.append(req.headers.get('Range'))

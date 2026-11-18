@@ -1,16 +1,14 @@
 """v0.7.5 runtime diagnostics must be bounded, private, and non-blocking."""
 from __future__ import annotations
+
 import asyncio
-import json
 from pathlib import Path
 from types import SimpleNamespace
-import time
 
 import numpy as np
-from music_perception.lyrics_diagnostics import publish_stage, read_stage, diagnose_stall
 from music_perception.lyrics_backend import transcribe_singing_candidate
+from music_perception.lyrics_diagnostics import diagnose_stall, publish_stage, read_stage
 from music_perception.lyrics_health_probe import run_probe
-from test_plugin import plugin_fixture
 
 
 def test_diagnostics_stage_and_privacy(tmp_path):
@@ -55,7 +53,8 @@ def test_whisper_hook_records_model_and_decoding(tmp_path):
 
 
 def test_health_probe_missing_model_is_offline_and_no_inference(tmp_path, monkeypatch):
-    vendor=tmp_path/'vendor';vendor.mkdir()
+    vendor=tmp_path/'vendor'
+    vendor.mkdir()
     report=tmp_path/'report.json'
     # Provide fake version metadata. No actual downloads, runtime probing or sound.
     import music_perception.lyrics_health_probe as module
@@ -98,7 +97,8 @@ def test_ui_has_one_click_action_and_safe_dom():
 
 
 def test_health_report_does_not_claim_success_when_deps_or_weights_missing(tmp_path, monkeypatch):
-    vendor=tmp_path/'vendor';vendor.mkdir()
+    vendor=tmp_path/'vendor'
+    vendor.mkdir()
     import music_perception.lyrics_health_probe as module
     def version(name):
         if name == 'faster-whisper':
@@ -113,8 +113,10 @@ def test_health_report_does_not_claim_success_when_deps_or_weights_missing(tmp_p
 
 
 def test_gpu_health_is_verified_only_after_real_synthetic_inference(tmp_path, monkeypatch):
-    vendor=tmp_path/'vendor';vendor.mkdir()
-    model=tmp_path/'models'/'base';model.mkdir(parents=True)
+    vendor=tmp_path/'vendor'
+    vendor.mkdir()
+    model=tmp_path/'models'/'base'
+    model.mkdir(parents=True)
     (model/'model.bin').write_bytes(b'123456789')
     (model/'config.json').write_text('{}',encoding='utf-8')
     (model/'tokenizer.json').write_text('{}',encoding='utf-8')
@@ -143,8 +145,10 @@ def test_gpu_health_is_verified_only_after_real_synthetic_inference(tmp_path, mo
 
 def test_diagnostic_button_is_single_flight(plugin_fixture, tmp_path, monkeypatch):
     plugin,_,_,_=plugin_fixture
-    import threading,sys
-    started=threading.Event(); finish=threading.Event()
+    import sys
+    import threading
+    started=threading.Event()
+    finish=threading.Event()
     async def scenario():
         await plugin.startup()
         monkeypatch.setattr(plugin._environment,'snapshot',lambda:{'ready':True})

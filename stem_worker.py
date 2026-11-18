@@ -2,11 +2,10 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import struct
 import sys
-import traceback
 import types
+from pathlib import Path
 
 LEN = struct.Struct('!I')
 MAX_HEADER = 4096
@@ -43,8 +42,8 @@ def main():
         # A verified plugin-private GPU wheel shadows the CPU ORT only in this
         # isolated music separator, not in lyrics/YAMNet or N.E.K.O.
         if len(sys.argv)==4 and sys.argv[3]!='-':
-            from pathlib import Path as _P
             import json as _json
+            from pathlib import Path as _P
             overlay=_P(sys.argv[3]).resolve()
             sys.path.insert(0,str(Path(__file__).resolve().parent))
             from stem_gpu_runtime import GPU_WHEEL, GPU_WHEEL_SHA256, MARKER
@@ -57,9 +56,9 @@ def main():
         package.__package__ = 'music_perception'
         sys.modules['music_perception'] = package
         import numpy as np
-        from music_perception.stem_cuda_bundle import cuda_runtime_path, configure_private_cuda
-        from music_perception.stem_mdx import TwoStemMDX, StemError, StemGpuUnavailable
+        from music_perception.stem_cuda_bundle import configure_private_cuda, cuda_runtime_path
         from music_perception.stem_gpu_runtime import overlay_path
+        from music_perception.stem_mdx import StemGpuUnavailable, TwoStemMDX
         # A shared Windows CUDA toolkit is NOT an accepted acceleration source.
         # Both binary layers have to be installed under this plugin's data path.
         env_root = (overlay.parent.parent if len(sys.argv)==4 and sys.argv[3]!='-'
@@ -80,9 +79,11 @@ def main():
         failed_gpu_reason = None
         while True:
             hdr = exact(sys.stdin.buffer, 4)
-            if hdr is None: break
+            if hdr is None:
+                break
             size, = LEN.unpack(hdr)
-            if not 1 <= size <= MAX_HEADER: raise RuntimeError('oversized stem header')
+            if not 1 <= size <= MAX_HEADER:
+                raise RuntimeError('oversized stem header')
             request = json.loads(exact(sys.stdin.buffer, size).decode('utf-8'))
             job = int(request.get('id', 0))
             frames = int(request.get('frames', 0))
@@ -91,7 +92,8 @@ def main():
                 send({'id':job, 'ok':False, 'error':'invalid music clip metadata'})
                 continue
             pcm = exact(sys.stdin.buffer, frames * 2 * 4)
-            if pcm is None: break
+            if pcm is None:
+                break
             try:
                 wants_gpu=bool(request.get('cuda',False))
                 cpu_allowed=bool(request.get('cpu_fallback_allowed',True))
@@ -108,20 +110,23 @@ def main():
                             '插件专用 CUDA/cuDNN/ONNX GPU 环境未完整安装；已使用 CPU 兜底')
                         model=TwoStemMDX(weight,request_gpu=False)
                     elif wants_gpu and failed_gpu_reason:
-                        if not cpu_allowed:raise StemGpuUnavailable('CUDA 故障；需先允许 CPU 内存运行')
+                        if not cpu_allowed:
+                            raise StemGpuUnavailable('CUDA 故障；需先允许 CPU 内存运行')
                         model=TwoStemMDX(weight,request_gpu=False)
                     else:
                         try:
                             model=TwoStemMDX(weight,request_gpu=wants_gpu)
                         except StemGpuUnavailable as exc:
-                            if not cpu_allowed:raise
+                            if not cpu_allowed:
+                                raise
                             failed_gpu_reason=str(exc)[:300]
                             model=TwoStemMDX(weight,request_gpu=False)
                 data = np.frombuffer(pcm, dtype='<f4').reshape((frames,2))
                 try:
                     result = model.separate(data, rate,strength=str(request.get('strength','balanced')))
                 except StemGpuUnavailable as exc:
-                    if not wants_gpu or not cpu_allowed:raise
+                    if not wants_gpu or not cpu_allowed:
+                        raise
                     failed_gpu_reason=str(exc)[:300]
                     model=TwoStemMDX(weight,request_gpu=False)
                     result=model.separate(data,rate,strength=str(request.get('strength','balanced')))

@@ -9,13 +9,12 @@ from __future__ import annotations
 
 import gc
 import json
-from pathlib import Path
 import shutil
 import sys
 import tempfile
 import time
 import types
-
+from pathlib import Path
 
 PROFILE_PREFIX = 'neko-stem-gpu-check-'
 PROFILE_MAX_BYTES = 32_000_000
@@ -100,8 +99,8 @@ def run_real_cuda_probe(model_path, result):
     Updates result in-place. A cleanup warning is independent of the reported
     CUDA inference outcome; no trace includes actual captured PCM.
     """
-    from music_perception.stem_mdx import TwoStemMDX
     import numpy as np
+    from music_perception.stem_mdx import TwoStemMDX
 
     _clean_old_profile_dirs()
     temp = Path(tempfile.mkdtemp(prefix=PROFILE_PREFIX))
@@ -154,7 +153,7 @@ def main():
     # Discover only the plugin-private user-mode NVIDIA DLLs. Never silently
     # rely on a different CUDA Toolkit on the Windows system PATH.
     sys.path.insert(0,str(Path(__file__).resolve().parent))
-    from stem_cuda_bundle import cuda_runtime_path, configure_private_cuda
+    from stem_cuda_bundle import configure_private_cuda, cuda_runtime_path
     from stem_gpu_runtime import overlay_path
     private_env = (overlay.parent.parent if str(overlay) != '-' else vendor.parent)
     onnx_gpu = overlay_path(private_env)

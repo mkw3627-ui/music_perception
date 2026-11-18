@@ -7,10 +7,11 @@ local files); this module never fetches arbitrary URLs.
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 import subprocess
 import sys
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from pathlib import Path
 
 MAX_FRAMES = 8

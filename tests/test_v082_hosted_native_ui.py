@@ -4,15 +4,14 @@ These tests use the N.E.K.O SDK double and offline fake model data; a Windows
 host/RTX card is still required for integration validation.
 """
 from __future__ import annotations
-import asyncio
+
 import ast
+import asyncio
 import tomllib
 from pathlib import Path
 
-from music_perception import MusicPerceptionPlugin
+from _version import plugin_version  # noqa: E402
 from music_perception.lyrics_model_store import MODELS, PUBLIC_SOURCES, _direct_file_url
-from test_plugin import plugin_fixture
-from _version import ui_build, panel_ui_build, plugin_version  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -41,11 +40,15 @@ def test_every_frontend_action_has_explicit_backend_permission():
     exposed=set()
     context=set()
     for node in cls.body:
-        if not isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)):continue
+        if not isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)):
+            continue
         for decorator in node.decorator_list:
-            if not isinstance(decorator,ast.Call) or not isinstance(decorator.func,ast.Attribute):continue
-            if not isinstance(decorator.func.value,ast.Name) or decorator.func.value.id!='ui':continue
-            if decorator.func.attr=='action':exposed.add(node.name)
+            if not isinstance(decorator,ast.Call) or not isinstance(decorator.func,ast.Attribute):
+                continue
+            if not isinstance(decorator.func.value,ast.Name) or decorator.func.value.id!='ui':
+                continue
+            if decorator.func.attr=='action':
+                exposed.add(node.name)
             if decorator.func.attr=='context':
                 context.update(k.value.value for k in decorator.keywords if k.arg=='id' and isinstance(k.value,ast.Constant))
     assert context=={'dashboard'}
@@ -108,6 +111,7 @@ def test_failed_99_percent_restart_exposes_real_reset_bytes(tmp_path, monkeypatc
     """A corrupt resumable prefix must not make a brand-new stream appear 99%."""
     import hashlib
     import io
+
     from music_perception import lyrics_model_store as store
     dest = tmp_path/'model.bin'
     good = b'SIGNED-MODEL-WEIGHT'*500
@@ -118,12 +122,18 @@ def test_failed_99_percent_restart_exposes_real_reset_bytes(tmp_path, monkeypatc
     class Response:
         status=200
         headers={'Content-Length':str(len(good))}
-        def __enter__(self): return self
-        def __exit__(self,*_): return False
-        def read(self,n): return self.stream.read(n)
-        def geturl(self): return 'https://hf-mirror.com/signed'
-        def getcode(self): return 200
-        def __init__(self): self.stream=io.BytesIO(good)
+        def __enter__(self):
+            return self
+        def __exit__(self,*_):
+            return False
+        def read(self,n):
+            return self.stream.read(n)
+        def geturl(self):
+            return 'https://hf-mirror.com/signed'
+        def getcode(self):
+            return 200
+        def __init__(self):
+            self.stream=io.BytesIO(good)
 
     monkeypatch.setattr(store.urllib.request,'urlopen',lambda *a,**kw:Response())
     store._stream_to_file('https://hf-mirror.com/file',dest,min_bytes=100,

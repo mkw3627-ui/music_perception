@@ -8,11 +8,12 @@ Usage: python singing_quality_eval.py separated_vocals_gold.jsonl
 This script never downloads a model, guesses a ground truth or reads system audio.
 """
 from __future__ import annotations
+
 import json
-from pathlib import Path
 import re
 import sys
 import unicodedata
+from pathlib import Path
 
 TARGET = 0.05
 # A single perfect phrase is not meaningful evidence. These limits are only a
@@ -32,7 +33,8 @@ def tokens(text: str, language: str) -> list[str]:
 
 def edit_distance(a:list[str],b:list[str]) -> int:
     # O(min(n,m)) RAM, no third-party imports
-    if len(a)<len(b):a,b=b,a
+    if len(a)<len(b):
+        a,b=b,a
     previous=list(range(len(b)+1))
     for i,x in enumerate(a,1):
         row=[i]
@@ -45,7 +47,8 @@ def edit_distance(a:list[str],b:list[str]) -> int:
 def measure(rows: list[dict]) -> dict:
     """Counts are aggregated across samples; never average per-clip rates."""
     per={lang:{'errors':0,'units':0,'clips':0} for lang in ('zh','ja','en')}
-    if not rows:raise ValueError('No test clips supplied')
+    if not rows:
+        raise ValueError('No test clips supplied')
     for row in rows:
         if not isinstance(row,dict) or row.get('source')!='separated_vocals':
             raise ValueError('Evaluation requires captured separated vocal tracks')
@@ -54,7 +57,8 @@ def measure(rows: list[dict]) -> dict:
             raise ValueError('Invalid reference/prediction entry')
         ref=tokens(row['reference'],lang)
         hyp=tokens(row['predicted'],lang)
-        if not ref:raise ValueError('Reference text must not be empty')
+        if not ref:
+            raise ValueError('Reference text must not be empty')
         per[lang]['errors']+=edit_distance(ref,hyp)
         per[lang]['units']+=len(ref)
         per[lang]['clips']+=1
@@ -88,4 +92,5 @@ def main():
     except (OSError,UnicodeError,ValueError,TypeError) as e:
         print(type(e).__name__+': '+str(e)[:140])
         return 2
-if __name__=='__main__':raise SystemExit(main())
+if __name__=='__main__':
+    raise SystemExit(main())

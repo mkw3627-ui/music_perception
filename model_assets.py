@@ -6,14 +6,12 @@ No N.E.K.O SDK, internet, audio recording or model inference occurs here.
 """
 from __future__ import annotations
 
-import os
-from pathlib import Path
 import secrets
 import shutil
+from pathlib import Path
 
 from .lyrics_model_store import EXPECTED_DOWNLOAD_BYTES, MODELS
-from .stem_mdx import MODEL_FILENAME, MODEL_SHA256
-from .stem_catalog import spec, DEFAULT_STEM_QUALITY, STEM_PROFILES
+from .stem_catalog import DEFAULT_STEM_QUALITY, spec
 
 # Conservative *planning* figures, MiB, not measured on this user machine. Actual peak varies with runtime,
 # batching, beam size, available CUDA libraries, and other GPU applications.
@@ -107,8 +105,11 @@ def remove_plugin_model_dir(root: Path, model: str) -> dict:
         # status and the on-disk directory do not silently diverge.
         restored=False
         if trash.exists() and not directory.exists():
-            try:trash.rename(directory);restored=True
-            except OSError:pass
+            try:
+                trash.rename(directory)
+                restored=True
+            except OSError:
+                pass
         return {'ok':False,
                 'error':('卸载未完成，已恢复模型目录，请停止插件后重试' if restored else
                          '卸载未完成，请关闭插件后检查临时目录 '+trash.name),

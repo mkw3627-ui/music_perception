@@ -3,11 +3,10 @@ fail-closed and separate from the official install-plan transaction."""
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import pytest
-
 from music_perception import MusicPerceptionPlugin
 from music_perception import install_prepare as builder
 

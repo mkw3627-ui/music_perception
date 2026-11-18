@@ -5,10 +5,11 @@ messages or GPU identifiers. Reads and writes are best effort so a locked
 Windows file never breaks audio capture or recognition.
 """
 from __future__ import annotations
+
 import json
 import os
-from pathlib import Path
 import time
+from pathlib import Path
 
 STAGES = frozenset({
     'worker_started', 'request_received', 'checking_model', 'model_ready',

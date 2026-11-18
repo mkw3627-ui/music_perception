@@ -1,7 +1,7 @@
 """Windows antivirus/WebView file-lock resilience for private GPU install."""
 import json
 import os
-from pathlib import Path
+
 from music_perception.stem_gpu_runtime import _status
 
 

@@ -6,11 +6,9 @@ import asyncio
 from pathlib import Path
 
 import pytest
-from music_perception import UI_PROTOCOL_BUILD
+from _version import panel_ui_build, plugin_version, ui_build  # noqa: E402
+from music_perception import UI_PROTOCOL_BUILD, lyrics_backend
 from music_perception import lyrics_model_store as store
-from music_perception import lyrics_backend
-from test_plugin import plugin_fixture
-from _version import ui_build, panel_ui_build, plugin_version  # noqa: E402
 
 
 def test_live_asr_refuses_network_until_explicit_verified_model_ready(tmp_path,monkeypatch):
@@ -113,7 +111,8 @@ def test_build_signature_in_back_and_front_and_manifest():
 
 
 def test_healthy_already_downloaded_model_still_reused_offline(tmp_path,monkeypatch):
-    folder=tmp_path/'base'; folder.mkdir()
+    folder=tmp_path/'base'
+    folder.mkdir()
     payload=b'good'*200
     import hashlib
     monkeypatch.setitem(store.MODELS,'base',dict(store.MODELS['base'],min_bytes=80,

@@ -3,22 +3,19 @@
 No soundcard, network, model weights, host TTS system or CUDA used.
 """
 from __future__ import annotations
+
 import asyncio
 import json
 import sys
-import threading
 import time
 import types
 from pathlib import Path
 
 import numpy as np
 import pytest
-
+from _version import ui_build  # noqa: E402
 from music_perception.audio_scene import classify_scene
-from music_perception.auto_listener import Decision, FinishedClip, LiveListener, SAMPLE_RATE
-from music_perception import MusicPerceptionPlugin
-from test_plugin import plugin_fixture
-from _version import ui_build, panel_ui_build, plugin_version  # noqa: E402
+from music_perception.auto_listener import SAMPLE_RATE, Decision, FinishedClip, LiveListener
 
 
 def decision(music=True, speech=0.1):
@@ -79,24 +76,30 @@ def test_paused_media_session_does_not_count_as_second_active():
 
 
 def test_listener_never_emits_mixed_samples_to_music_or_video(tmp_path):
-    events=[]
     music=[]
     video=[]
     changes=[]
     windows=6
     class Source:
-        def __enter__(self):self.i=0;return self
-        def __exit__(self,*a):pass
+        def __enter__(self):
+            self.i=0
+            return self
+        def __exit__(self,*a):
+            pass
         def read(self):
-            if self.i>=windows: time.sleep(.02)
+            if self.i>=windows:
+                time.sleep(.02)
             self.i+=1
             return np.full(2*SAMPLE_RATE,.09,np.float32)
     class Gate:
-        def __init__(self,*a,**kw):pass
-        def classify(self,w):return decision(True)
+        def __init__(self,*a,**kw):
+            pass
+        def classify(self,w):
+            return decision(True)
     def scene(d):
         counter=source.i
-        if counter<=4:return dict(kind='video',verified=True,reason='test_single_video',source_count=1)
+        if counter<=4:
+            return dict(kind='video',verified=True,reason='test_single_video',source_count=1)
         return dict(kind='mixed',verified=False,reason='two_sources',source_count=2)
     # The scene closure shares the same source instance with the listener.
     source=Source()
@@ -107,7 +110,8 @@ def test_listener_never_emits_mixed_samples_to_music_or_video(tmp_path):
         on_scene_change=changes.append)
     listener.start()
     for _ in range(150):
-        if listener.status().get('scene_kind')=='mixed':break
+        if listener.status().get('scene_kind')=='mixed':
+            break
         time.sleep(.01)
     assert listener.status()['scene_kind']=='mixed'
     assert listener.status()['scene_blocked_windows']>=1
@@ -164,7 +168,8 @@ def test_video_speech_only_shared_privately_and_only_when_consented(plugin_fixtu
         plugin.push_message=lambda **kwargs: pushed.append(kwargs) or {'submitted':True}
         clip=FinishedClip(np.full(6*SAMPLE_RATE,.15,np.float32),'video_speech_preview',3)
         import queue
-        q=queue.Queue();q.put(1)
+        q=queue.Queue()
+        q.put(1)
         plugin._process_video_speech(clip, plugin._listener_session,'test_video_session',q)
         assert q.unfinished_tasks == 0
         assert plugin._video_transcript['cues'][0]['text_candidate']=='这是测试句子'
@@ -209,15 +214,19 @@ def test_all_smtc_sessions_and_video_playback_type_can_be_read(monkeypatch):
             return types.SimpleNamespace(playback_status=types.SimpleNamespace(name='Playing'))
         async def try_get_media_properties_async(self):
             return Props(self.kind,'fake title')
-        def get_timeline_properties(self):return None
+        def get_timeline_properties(self):
+            return None
     music=Session('music.exe','Music')
     video=Session('video.exe','Video')
     class Manager:
-        def get_current_session(self):return video
-        def get_sessions(self):return [music,video]
+        def get_current_session(self):
+            return video
+        def get_sessions(self):
+            return [music,video]
     class FakeManager:
         @staticmethod
-        async def request_async():return Manager()
+        async def request_async():
+            return Manager()
     # Real pywinrt module name; no network nor Windows runtime used.
     module=types.ModuleType('winrt.windows.media.control')
     module.GlobalSystemMediaTransportControlsSessionManager=FakeManager
@@ -232,7 +241,7 @@ def test_all_smtc_sessions_and_video_playback_type_can_be_read(monkeypatch):
 
 
 def test_separate_output_cannot_silently_fall_back_to_wrong_speaker(monkeypatch):
-    from music_perception.auto_listener import SoundCardLoopback,ListenerError
+    from music_perception.auto_listener import ListenerError, SoundCardLoopback
     class Speaker:
         id='physical-default'
     module=types.ModuleType('soundcard')
@@ -240,7 +249,8 @@ def test_separate_output_cannot_silently_fall_back_to_wrong_speaker(monkeypatch)
     module.all_speakers=lambda:[Speaker()]
     monkeypatch.setitem(sys.modules,'soundcard',module)
     with pytest.raises(ListenerError,match='设备已不存在'):
-        with SoundCardLoopback(output_device_id='unavailable-target'):pass
+        with SoundCardLoopback(output_device_id='unavailable-target'):
+            pass
 
 
 def test_old_video_asr_result_does_not_reappear_after_mixed_scene(plugin_fixture):
@@ -254,7 +264,8 @@ def test_old_video_asr_result_does_not_reappear_after_mixed_scene(plugin_fixture
         plugin._audio_scene={'kind':'video','verified':True}
         plugin._on_scene_change({'kind':'mixed','verified':False,'source_count':2})
         plugin._transcribe_live_audio_isolated=lambda *a:{'timed_cues':[{'at_s':0,'text_preview':'stale'}]}
-        q=__import__('queue').Queue();q.put(1)
+        q=__import__('queue').Queue()
+        q.put(1)
         clip=FinishedClip(np.zeros(6*SAMPLE_RATE,np.float32),'video_speech_preview',3)
         plugin._process_video_speech(clip,plugin._listener_session,'v1',q)
         assert plugin._video_transcript is None
@@ -280,9 +291,12 @@ def test_smtc_uses_playback_info_for_type_and_numeric_playing():
         playback_type=2
     class Session:
         source_app_user_model_id='browser'
-        async def try_get_media_properties_async(self): return Media()
-        def get_playback_info(self): return Info()
-        def get_timeline_properties(self): return None
+        async def try_get_media_properties_async(self):
+            return Media()
+        def get_playback_info(self):
+            return Info()
+        def get_timeline_properties(self):
+            return None
     value=asyncio.run(_session_info(Session()))
     assert value['playing'] is True and value['playback_type']=='video'
 
@@ -305,12 +319,17 @@ def test_two_windows_media_sessions_from_same_app_still_count_as_mixed():
 def test_source_detection_exception_fails_closed(tmp_path):
     sounds=[]
     class Source:
-        def __enter__(self):return self
-        def __exit__(self,*args):return False
-        def read(self):return np.full(2*SAMPLE_RATE,.12,np.float32)
+        def __enter__(self):
+            return self
+        def __exit__(self,*args):
+            return False
+        def read(self):
+            return np.full(2*SAMPLE_RATE,.12,np.float32)
     class Gate:
-        def __init__(self,*args,**kwargs):pass
-        def classify(self,wave):return decision(True)
+        def __init__(self,*args,**kwargs):
+            pass
+        def classify(self,wave):
+            return decision(True)
     inst=LiveListener(model_file=tmp_path/'none',max_seconds=10,
         threshold=.24,on_clip=sounds.append,
         source_factory=Source, gate_factory=Gate,

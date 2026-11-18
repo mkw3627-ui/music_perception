@@ -3,17 +3,13 @@ import asyncio
 import hashlib
 import json
 import sys
-from pathlib import Path
 
-import numpy as np
 import pytest
-
 from music_perception import lyrics_model_store as store
+from music_perception.auto_listener import FinishedClip
 from music_perception.lyrics_health_probe import run_probe
 from music_perception.lyrics_prepare_worker import main as prepare_main
-from music_perception.auto_listener import FinishedClip
 from test_lyrics_v063 import pcm
-from test_plugin import plugin_fixture
 
 
 def _model(root, data):
@@ -56,18 +52,23 @@ def test_corrupt_global_cache_is_not_treated_as_verified(monkeypatch,tmp_path):
 def test_live_unready_child_does_not_block_model_prepare(plugin_fixture,monkeypatch):
     plugin,*_=plugin_fixture
     class Env:
-        def snapshot(self):return {'ready':True}
-        def stop(self):pass
+        def snapshot(self):
+            return {'ready':True}
+        def stop(self):
+            pass
     class ASR:
         running=True
         _model_ready=False
         closed=False
-        def close(self):self.closed=True;self.running=False
+        def close(self):
+            self.closed=True
+            self.running=False
     async def scenario():
         await plugin.startup()
         plugin._environment=Env()
         plugin._lyrics_profile='medium'
-        prior=ASR();plugin._lyrics_session=prior
+        prior=ASR()
+        plugin._lyrics_session=prior
         jobs=[]
         monkeypatch.setattr(plugin,'_prepare_lyrics_model_background',lambda name:jobs.append(name))
         result=plugin._schedule_lyrics_model_prepare()
@@ -82,17 +83,23 @@ def test_live_unready_child_does_not_block_model_prepare(plugin_fixture,monkeypa
 def test_loaded_child_is_not_needlessly_restarted(plugin_fixture):
     plugin,*_=plugin_fixture
     class Env:
-        def snapshot(self):return {'ready':True}
-        def stop(self):pass
+        def snapshot(self):
+            return {'ready':True}
+        def stop(self):
+            pass
     class ASR:
         running=True
         _model_ready=True
         closed=False
-        def close(self):self.closed=True;self.running=False
+        def close(self):
+            self.closed=True
+            self.running=False
     async def scenario():
         await plugin.startup()
-        plugin._environment=Env();plugin._lyrics_profile='medium'
-        previous=ASR();plugin._lyrics_session=previous
+        plugin._environment=Env()
+        plugin._lyrics_profile='medium'
+        previous=ASR()
+        plugin._lyrics_session=previous
         answer=plugin._schedule_lyrics_model_prepare()
         assert answer['model_loaded'] is True and not previous.closed
         assert plugin._lyrics_prepare_thread is None
@@ -124,7 +131,8 @@ def test_model_prepare_error_tells_user_network_without_leaking_paths(monkeypatc
     def fail(*a,**k):
         raise store.LyricsModelDownloadError('歌词模型权重未下载完成；官方源及可用镜像均无法取得已校验文件。')
     monkeypatch.setattr(store,'ensure_local_model',fail)
-    vendor=tmp_path/'vendor';vendor.mkdir()
+    vendor=tmp_path/'vendor'
+    vendor.mkdir()
     report=tmp_path/'status.json'
     monkeypatch.setattr(sys,'argv',['lyrics_prepare_worker.py',str(vendor),str(tmp_path/'models'),
                          'base',str(report),'1'])

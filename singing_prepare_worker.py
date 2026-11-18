@@ -1,17 +1,19 @@
 """Dedicated opt-in download subprocess for specialist song-vocal checkpoints."""
 from __future__ import annotations
+
 import json
 import os
-from pathlib import Path
 import sys
 import time
 import traceback
 import types
 import uuid
+from pathlib import Path
 
 
 def main():
-    if len(sys.argv)!=5:return 2
+    if len(sys.argv)!=5:
+        return 2
     vendor,root,quality,source=sys.argv[1:]
     here=Path(__file__).resolve().parent
     module=types.ModuleType('music_perception')
@@ -47,8 +49,10 @@ def main():
             except OSError:
                 time.sleep(0.04*(attempt+1))
             finally:
-                try:tmp.unlink(missing_ok=True)
-                except OSError:pass
+                try:
+                    tmp.unlink(missing_ok=True)
+                except OSError:
+                    pass
     try:
         publish('starting')
         acquire_model(Path(root),quality,source=source,on_stage=publish,
@@ -63,4 +67,5 @@ def main():
         traceback.print_exc(file=sys.stderr)
         publish('failed',type(exc).__name__+': '+str(exc)[:180])
         return 1
-if __name__=='__main__':raise SystemExit(main())
+if __name__=='__main__':
+    raise SystemExit(main())

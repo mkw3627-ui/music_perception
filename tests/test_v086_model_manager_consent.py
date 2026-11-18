@@ -11,13 +11,9 @@ import types
 from pathlib import Path
 
 import pytest
-
-from music_perception import MusicPerceptionPlugin
 from music_perception import model_assets as assets
-from music_perception import stem_prepare_worker as downloader
 from music_perception import stem_mdx
-from music_perception.lyrics_model_store import MODELS
-from test_plugin import plugin_fixture
+from music_perception import stem_prepare_worker as downloader
 
 
 def test_download_plans_explain_disk_and_suggested_gpu_capacity():
@@ -30,8 +26,10 @@ def test_download_plans_explain_disk_and_suggested_gpu_capacity():
         assert info['disclaimer']
         assert info['download_source']=='mirror'
     assert assets.model_plan('large-v3-turbo')['suggested_free_vram_mib']>=6144
-    with pytest.raises(ValueError):assets.model_plan('unknown')
-    with pytest.raises(ValueError):assets.model_plan('stems',source='file:///untrusted')
+    with pytest.raises(ValueError):
+        assets.model_plan('unknown')
+    with pytest.raises(ValueError):
+        assets.model_plan('stems',source='file:///untrusted')
 
 
 def test_stem_source_is_pinned_and_prioritized():
@@ -111,23 +109,28 @@ def test_lyrics_uninstall_requires_confirmation_and_paused_for_active(plugin_fix
 
 
 def test_uninstall_rejects_symlink_and_nonmodel_path(tmp_path):
-    root=tmp_path/'models';root.mkdir()
-    other=tmp_path/'private';other.mkdir()
+    root=tmp_path/'models'
+    root.mkdir()
+    other=tmp_path/'private'
+    other.mkdir()
     (other/'secret.txt').write_text('keep',encoding='utf8')
     try:
         (root/'base').symlink_to(other,target_is_directory=True)
     except OSError:
         pytest.skip('symlinks unavailable')
-    with pytest.raises(OSError):assets.remove_plugin_model_dir(root,'base')
+    with pytest.raises(OSError):
+        assets.remove_plugin_model_dir(root,'base')
     assert (other/'secret.txt').read_text('utf8')=='keep'
-    with pytest.raises(ValueError):assets.remove_plugin_model_dir(root,'../../private')
+    with pytest.raises(ValueError):
+        assets.remove_plugin_model_dir(root,'../../private')
 
 
 def test_stem_uninstall_does_not_touch_lyrics_or_other_model_files(plugin_fixture):
     plugin,*_=plugin_fixture
     async def scenario():
         await plugin.startup()
-        root=plugin.data_path('models')/'stems';root.mkdir(parents=True)
+        root=plugin.data_path('models')/'stems'
+        root.mkdir(parents=True)
         (root/stem_mdx.MODEL_FILENAME).write_bytes(b'synthetic model')
         (root/'other-model.onnx').write_bytes(b'do not touch')
         assert not (await plugin.uninstall_stem_model(confirmed=False)).value['ok']
@@ -158,10 +161,13 @@ def _fake_dependencies(monkeypatch,*,success_after=1):
     calls=[]
     def stream(url,destination,*,transfer_progress=None,verification_progress=None,**_):
         calls.append(url)
-        if len(calls)<success_after:raise OSError('simulated CDN outage')
-        if transfer_progress:transfer_progress(8,17,False)
+        if len(calls)<success_after:
+            raise OSError('simulated CDN outage')
+        if transfer_progress:
+            transfer_progress(8,17,False)
         Path(destination).write_bytes(b'verified fake ONNX')
-        if verification_progress:verification_progress(17,17)
+        if verification_progress:
+            verification_progress(17,17)
     transfer._stream_to_file=stream
     monkeypatch.setitem(sys.modules,'lyrics_model_store',transfer)
     return calls
@@ -169,7 +175,8 @@ def _fake_dependencies(monkeypatch,*,success_after=1):
 
 def test_stem_worker_fails_over_and_ends_only_after_verification(monkeypatch,tmp_path):
     calls=_fake_dependencies(monkeypatch,success_after=2)
-    destination=tmp_path/'stems';status=tmp_path/'progress.json'
+    destination=tmp_path/'stems'
+    status=tmp_path/'progress.json'
     assert downloader.main([str(destination),str(status),'mirror'])==0
     assert len(calls)==2 and calls[0].startswith('https://www.modelscope.cn')
     assert calls[1].startswith('https://hf-mirror.com')
@@ -181,7 +188,8 @@ def test_stem_worker_fails_over_and_ends_only_after_verification(monkeypatch,tmp
 
 def test_stem_worker_uses_verified_disk_file_without_network(monkeypatch,tmp_path):
     calls=_fake_dependencies(monkeypatch)
-    destination=tmp_path/'stems';destination.mkdir()
+    destination=tmp_path/'stems'
+    destination.mkdir()
     (destination/stem_mdx.MODEL_FILENAME).write_bytes(b'verified fake ONNX')
     status=tmp_path/'progress.json'
     assert downloader.main([str(destination),str(status),'official'])==0
@@ -191,7 +199,8 @@ def test_stem_worker_uses_verified_disk_file_without_network(monkeypatch,tmp_pat
 
 def test_stem_worker_failure_is_visible_and_never_claims_success(monkeypatch,tmp_path):
     calls=_fake_dependencies(monkeypatch,success_after=20)
-    destination=tmp_path/'stems';status=tmp_path/'progress.json'
+    destination=tmp_path/'stems'
+    status=tmp_path/'progress.json'
     assert downloader.main([str(destination),str(status),'official'])==1
     assert len(calls)==4
     record=json.loads(status.read_text('utf8'))

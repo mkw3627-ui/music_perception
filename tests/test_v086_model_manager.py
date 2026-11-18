@@ -8,10 +8,7 @@ import sys
 import types
 from pathlib import Path
 
-from music_perception import model_assets
-from music_perception import stem_prepare_worker
-from music_perception import MusicPerceptionPlugin
-from test_plugin import plugin_fixture
+from music_perception import model_assets, stem_prepare_worker
 
 
 def test_model_plans_are_explanations_not_hard_gpu_requirements():
@@ -60,14 +57,16 @@ def test_stem_worker_tracks_real_progress_and_hash_without_download(tmp_path,mon
     safe_catalog.verify_local_model=lambda path,quality: Path(path).is_file() and Path(path).read_bytes()==payload
     monkeypatch.setitem(sys.modules,'stem_catalog',safe_catalog)
     monkeypatch.setitem(sys.modules,'lyrics_model_store',types.SimpleNamespace(_stream_to_file=stream))
-    folder=tmp_path/'stems';status=tmp_path/'status.json'
+    folder=tmp_path/'stems'
+    status=tmp_path/'status.json'
     assert stem_prepare_worker.main([str(folder),str(status),'mirror'])==0
     data=json.loads(status.read_text('utf-8'))
     assert data['state']=='ready' and data['sha256_verified']
     assert data['pct']==100 and data['model_bytes']==len(payload)
     assert (folder/model.MODEL_FILENAME).read_bytes()==payload
     # Second confirmation reuses local verified data, with no new stream.
-    def fail(*args,**kwargs):raise AssertionError('model unexpectedly re-downloaded')
+    def fail(*args,**kwargs):
+        raise AssertionError('model unexpectedly re-downloaded')
     monkeypatch.setitem(sys.modules,'lyrics_model_store',types.SimpleNamespace(_stream_to_file=fail))
     assert stem_prepare_worker.main([str(folder),str(status),'official'])==0
 
@@ -100,7 +99,8 @@ def test_model_uninstall_precise_scope(tmp_path):
     (root/'base').mkdir()
     (root/'tiny'/'model.bin').write_bytes(b'fake')
     (root/'base'/'model.bin').write_bytes(b'keep')
-    env=tmp_path/'models'/'environment';env.mkdir()
+    env=tmp_path/'models'/'environment'
+    env.mkdir()
     (env/'python.exe').write_bytes(b'keep')
     r=model_assets.remove_plugin_model_dir(root,'tiny')
     assert r['ok'] and r['bytes_removed']==4
@@ -111,19 +111,26 @@ def test_model_uninstall_precise_scope(tmp_path):
 
 def test_no_shared_or_symlink_delete(tmp_path):
     root=tmp_path/'models'
-    external=tmp_path/'elsewhere';external.mkdir()
+    external=tmp_path/'elsewhere'
+    external.mkdir()
     (external/'model.bin').write_bytes(b'private')
     root.mkdir()
-    try:(root/'tiny').symlink_to(external,target_is_directory=True)
-    except (OSError,NotImplementedError):return
-    try: model_assets.remove_plugin_model_dir(root,'tiny')
-    except OSError:pass
-    else:raise AssertionError('symlink was followed')
+    try:
+        (root/'tiny').symlink_to(external,target_is_directory=True)
+    except (OSError,NotImplementedError):
+        return
+    try:
+        model_assets.remove_plugin_model_dir(root,'tiny')
+    except OSError:
+        pass
+    else:
+        raise AssertionError('symlink was followed')
     assert (external/'model.bin').read_bytes()==b'private'
 
 
 def test_stem_uninstall_removes_only_allowlisted_files(tmp_path):
-    directory=tmp_path/'stems';directory.mkdir()
+    directory=tmp_path/'stems'
+    directory.mkdir()
     filename='UVR-MDX-NET-Inst_HQ_3.onnx'
     (directory/filename).write_bytes(b'123')
     (directory/(filename+'.partial')).write_bytes(b'partial')
@@ -157,7 +164,8 @@ def test_stem_uninstall_guards_active_and_preserves_whisper(plugin_fixture):
     plugin,*_=plugin_fixture
     async def scenario():
         await plugin.startup()
-        path=plugin._stem_model_path();path.parent.mkdir(parents=True)
+        path=plugin._stem_model_path()
+        path.parent.mkdir(parents=True)
         path.write_bytes(b'fixture')
         whisper=plugin.data_path('models')/'whisper_multilingual'/'base'/'model.bin'
         whisper.parent.mkdir(parents=True)

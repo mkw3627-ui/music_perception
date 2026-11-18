@@ -4,16 +4,18 @@ import asyncio
 import json
 import sys
 import types
-from pathlib import Path
 
 import numpy as np
 import pytest
-
-from test_plugin import plugin_fixture
-
 from music_perception.auto_listener import (
-    Decision, FinishedClip, LiveListener, ListenerError, MusicClipCollector,
-    YamnetMusicGate, SoundCardLoopback, SAMPLE_RATE,
+    SAMPLE_RATE,
+    Decision,
+    FinishedClip,
+    ListenerError,
+    LiveListener,
+    MusicClipCollector,
+    SoundCardLoopback,
+    YamnetMusicGate,
 )
 
 
@@ -169,7 +171,8 @@ def test_thread_lifecycle_synth_source(tmp_path):
         def __enter__(self):
             self.i = 0
             return self
-        def __exit__(self, *_): pass
+        def __exit__(self, *_):
+            pass
         def read(self):
             import time
             if self.i >= 8:
@@ -188,7 +191,8 @@ def test_thread_lifecycle_synth_source(tmp_path):
     listener.start()
     import time
     for _ in range(100):
-        if clips: break
+        if clips:
+            break
         time.sleep(.007)
     assert len(clips) == 1
     assert listener.status()['music_clips_completed'] == 1
@@ -198,7 +202,6 @@ def test_thread_lifecycle_synth_source(tmp_path):
 
 def test_live_report_never_pretends_whole_song(plugin_fixture, monkeypatch):
     # Plugin callback generates a JSON report from RAM and no raw WAV file.
-    from music_perception import MusicPerceptionPlugin
     import music_perception as module
     plugin, music, other, pushed = plugin_fixture
     real_analyze = module.analyze_waveform
@@ -225,12 +228,18 @@ def test_explicit_consent_required_and_persisted(plugin_fixture, monkeypatch):
     import music_perception as module
     plugin, *_ = plugin_fixture
     class FakeGate:
-        def __init__(self,*a,**kw): pass
+        def __init__(self,*a,**kw):
+            pass
     class FakeLive:
-        def __init__(self, **kwargs): self.running=False
-        def start(self): self.running=True
-        def stop(self): self.running=False;return True
-        def status(self): return {'status':'listening' if self.running else 'stopped', 'capturing_music':False}
+        def __init__(self, **kwargs):
+            self.running=False
+        def start(self):
+            self.running=True
+        def stop(self):
+            self.running=False
+            return True
+        def status(self):
+            return {'status':'listening' if self.running else 'stopped', 'capturing_music':False}
     import music_perception.auto_listener as listener_module
     monkeypatch.setattr(listener_module, 'YamnetMusicGate', FakeGate)
     monkeypatch.setattr(module, 'LiveListener', FakeLive)

@@ -4,21 +4,19 @@ No real CUDA or network is needed; on a user's Windows PC a real model inference
 must still run before reporting GPU verified.
 """
 from __future__ import annotations
+
 import asyncio
 import hashlib
-import io
 import json
-from pathlib import Path
 import sys
 import types
 import zipfile
+from pathlib import Path
 
 import numpy as np
 import pytest
-
 from music_perception import stem_gpu_runtime as gpu
 from music_perception import stem_mdx
-from test_plugin import plugin_fixture
 
 
 def _fake_ort(monkeypatch, *, available=None, active=None, crash=False):
@@ -32,12 +30,17 @@ def _fake_ort(monkeypatch, *, available=None, active=None, crash=False):
         name='input'
         shape=[1,4,3072,256]
     class Session:
-        def __init__(self,*a,**k):self.disabled=False
-        def get_providers(self):return active
-        def get_inputs(self):return [Inp()]
-        def disable_fallback(self):self.disabled=True
+        def __init__(self,*a,**k):
+            self.disabled=False
+        def get_providers(self):
+            return active
+        def get_inputs(self):
+            return [Inp()]
+        def disable_fallback(self):
+            self.disabled=True
         def run(self,names,feed):
-            if crash:raise RuntimeError('native cudnn model failure')
+            if crash:
+                raise RuntimeError('native cudnn model failure')
             return [feed['input']]
     module=types.ModuleType('onnxruntime')
     module.__version__='1.26.0'
@@ -123,7 +126,8 @@ def test_gpu_wheel_overlay_never_changes_audio_vendor(monkeypatch,tmp_path):
     monkeypatch.setattr(lyrics_model_store,'_stream_to_file',lambda url, dest, **kw:
                         dest.write_bytes(whl.read_bytes()))
     base=tmp_path/'environment'
-    vendor=base/'vendor';vendor.mkdir(parents=True)
+    vendor=base/'vendor'
+    vendor.mkdir(parents=True)
     (vendor/'onnxruntime_cpu_marker.txt').write_text('do not modify')
     status=base/'gpu-status.json'
     assert gpu.install_gpu(base,status,'mirror')
@@ -187,7 +191,8 @@ def test_gpu_source_priority_is_known_and_not_arbitrary():
     official=gpu._index_urls('official')
     assert mirror[0][0]=='清华镜像'
     assert official[0][0]=='PyPI 官方'
-    with pytest.raises(gpu.StemGpuInstallError):gpu._index_urls('other')
+    with pytest.raises(gpu.StemGpuInstallError):
+        gpu._index_urls('other')
 
 
 def test_stem_worker_gpu_flag_is_passed_to_child_and_device_reported(tmp_path):

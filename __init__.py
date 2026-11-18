@@ -8,59 +8,116 @@ import math
 import os
 import queue
 import secrets
-import threading
 import sys
+import threading
 import time
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated
 
 from plugin.sdk.plugin import (
-    NekoPluginBase, Ok, lifecycle, llm_tool, neko_plugin, plugin_entry, ui,
+    NekoPluginBase,
+    Ok,
+    lifecycle,
+    llm_tool,
+    neko_plugin,
+    plugin_entry,
+    ui,
 )
 
-from .engine import AudioAnalysisError, EXTENSIONS, analyze_audio, analyze_waveform, brief_for_ai
-from .auto_listener import LiveListener, ListenerError, FinishedClip
-from .audio_scene import classify_scene, normal_role
-from .isolated_loopback import IsolatedWindowsLoopback, IsolatedApplicationLoopback
-from .host_llm import HostAppClassifier
-from .app_channels import (list_app_processes, verify_selected_process,
-                           selected_scene, CAPTURE_MODES, tag_application,
-                           process_image_path, normalized_exe_path, browser_executable,
-                           choose_title_evidence, MUSIC_APPLICATIONS,
-                           BROWSER_APPLICATIONS, VIDEO_APPLICATIONS)
-from .window_titles import titles_by_pid, windows_by_pid, foreground_window, resolve_titles
-from .song_titles import parse_player_window_title
-from .windows_audio_sessions import scan_audible_sessions
+from .adaptive_resources import DEFAULT_RESERVE_MIB, PressureTracker, free_system_ram_mib, gpu_memory, select_model
+from .adaptive_resources import DOMAINS as RESOURCE_DOMAINS
+from .adaptive_resources import TIERS as RESOURCE_TIERS
+from .analysis_bridge import AnalysisWorkerCancelled, AnalysisWorkerError, analyze_pcm_isolated
+from .app_channels import (
+    BROWSER_APPLICATIONS,
+    CAPTURE_MODES,
+    MUSIC_APPLICATIONS,
+    VIDEO_APPLICATIONS,
+    browser_executable,
+    choose_title_evidence,
+    list_app_processes,
+    normalized_exe_path,
+    process_image_path,
+    selected_scene,
+    tag_application,
+    verify_selected_process,
+)
 from .app_source_recovery import find_replacement
-from .audio_dispatch import PrivateAudioBus, SourceLabels, source_id as make_source_id
-from .media_modes import MediaModeFile, detect_game
-from .vision_review import (VisionReviewPolicy, REVIEW_LABEL_TTL_S, app_matches,
-                            classify_observation, reviewable_tag, pick_review_target,
-                            pick_capture_target, normalize_app)
-from .process_capture_installer import ProcessCaptureInstaller
-from .runtime_environment import MusicEnvironment, model_valid
-from .analysis_bridge import analyze_pcm_isolated, AnalysisWorkerError, AnalysisWorkerCancelled
-from .spectral_context import spectrum_for_ai, auxiliary_cues, ai_auditory_context, condensed_history_item
-from .music_events import offset_event_timeline, compact_music_context, enrich_with_user_lrc
-from .lyrics_sync import load_adjacent_lrc
-from .player_lyrics import find_authorized_player_lrc, preview_player_lyrics
-from .lyrics_bridge import recognize_pcm_isolated, PersistentLyricsSession, LyricsWorkerError, LyricsModelDownloadError
+from .audio_dispatch import PrivateAudioBus, SourceLabels
+from .audio_dispatch import source_id as make_source_id
+from .audio_scene import classify_scene, normal_role
+from .auto_listener import FinishedClip, ListenerError, LiveListener
+from .cognitive_bridge_v1 import HearingCognitiveBridgeV1
+from .engine import EXTENSIONS, AudioAnalysisError, analyze_audio, brief_for_ai
+from .engine import analyze_waveform as analyze_waveform  # tests patch this module attribute
+from .glance import GLANCE_INTERVAL_S, GlanceScheduler
+from .host_llm import HostAppClassifier
+from .isolated_loopback import IsolatedApplicationLoopback, IsolatedWindowsLoopback
 from .lyric_timing import align_lyrics_to_music
-from .media_session_bridge import read_system_media
-from .song_memory import RecentSongMemory, QUALITY_MODEL, trusted_song_identity, audio_segment_fingerprint
+from .lyrics_bridge import LyricsModelDownloadError, LyricsWorkerError, PersistentLyricsSession
 from .lyrics_continuity import join_song_audio, merge_song_lyrics
 from .lyrics_device_capabilities import probe_cuda_isolated
-from .stem_mdx import MODEL_FILENAME as STEM_MODEL_FILENAME, MODEL_SOURCE as STEM_MODEL_SOURCE, verify_model as verify_stem_model
+from .lyrics_diagnostics import diagnose_stall, read_stage
+from .lyrics_sync import load_adjacent_lrc
+from .media_modes import MediaModeFile, detect_game
+from .media_session_bridge import read_system_media
+from .model_assets import free_disk_check, model_plan, remove_plugin_model_dir, remove_stem_model
+from .music_events import compact_music_context, enrich_with_user_lrc, offset_event_timeline
+from .onboarding import (
+    OnboardingInstaller,
+    OnboardingStore,
+    picker_cancel,
+    picker_start,
+    picker_wait,
+    recommend,
+    scan_environment,
+    validate_storage_root,
+)
+from .player_lyrics import find_authorized_player_lrc, preview_player_lyrics
+from .process_capture_installer import ProcessCaptureInstaller
+from .runtime_environment import MusicEnvironment, model_valid
+from .singing_catalog import PROFILES as SINGING_PROFILES
+from .singing_catalog import inventory as singing_inventory
+from .singing_catalog import verified_folder as verified_singing_folder
+from .singing_install import (
+    SingingInstallCancelled,
+    private_environment_status,
+)
+from .singing_install import (
+    ensure_environment as ensure_singing_environment,
+)
+from .singing_install import (
+    paths as singing_venv_paths,
+)
+from .singing_install import (
+    uninstall_environment as remove_singing_private_venv,
+)
+from .song_memory import QUALITY_MODEL, RecentSongMemory, audio_segment_fingerprint, trusted_song_identity
+from .song_titles import parse_player_window_title
+from .spectral_context import ai_auditory_context, auxiliary_cues, spectrum_for_ai
+from .speech_timeline import annotate_video_evidence, music_phrases, video_sentences
 from .stem_bridge import PersistentStemSession, StemWorkerError
-from .stem_gpu_runtime import (overlay_path as stem_gpu_overlay_path,
-                               inventory as stem_gpu_inventory)
-from .stem_catalog import (STEM_PROFILES, DEFAULT_STEM_QUALITY, path_for as stem_path_for,
-                           overview as stem_overview, verify_local_model as verify_stem_tier)
-from .speech_timeline import music_phrases, video_sentences, annotate_video_evidence
+from .stem_catalog import DEFAULT_STEM_QUALITY, STEM_PROFILES
+from .stem_catalog import overview as stem_overview
+from .stem_catalog import path_for as stem_path_for
+from .stem_catalog import verify_local_model as verify_stem_tier
+from .stem_gpu_runtime import inventory as stem_gpu_inventory
+from .stem_gpu_runtime import overlay_path as stem_gpu_overlay_path
+from .stem_mdx import MODEL_SOURCE as STEM_MODEL_SOURCE
+from .stem_mdx import verify_model as verify_stem_model
 from .video_series import infer_video_position
 from .video_window import decide_video_window
-from .glance import GlanceScheduler, GLANCE_INTERVAL_S
-from .cognitive_bridge_v1 import HearingCognitiveBridgeV1
+from .vision_review import (
+    REVIEW_LABEL_TTL_S,
+    VisionReviewPolicy,
+    app_matches,
+    classify_observation,
+    pick_capture_target,
+    pick_review_target,
+    reviewable_tag,
+)
+from .window_titles import foreground_window, resolve_titles, titles_by_pid, windows_by_pid
+from .windows_audio_sessions import scan_audible_sessions
 
 # Two video watch tiers. 'balanced' = frames + speech evidence (default);
 # 'efficient' = frames only, for low-end machines.
@@ -155,22 +212,6 @@ GLANCE_VERDICT_FRAMES = 3
 # cross-plugin RPC timeout so it always covers every requested frame.
 GLANCE_FRAME_COST_S = 25.0
 GLANCE_TIMEOUT_CEILING_S = 240.0
-from .model_assets import (model_plan, free_disk_check, remove_plugin_model_dir,
-                           remove_stem_model, STEM_EXPECTED_BYTES)
-from .lyrics_diagnostics import read_stage, diagnose_stall
-from .singing_catalog import PROFILES as SINGING_PROFILES, inventory as singing_inventory, verified_folder as verified_singing_folder
-from .singing_install import (
-    ensure_environment as ensure_singing_environment, paths as singing_venv_paths,
-    private_environment_status, uninstall_environment as remove_singing_private_venv,
-    SingingInstallCancelled,
-)
-from .adaptive_resources import (
-    DOMAINS as RESOURCE_DOMAINS, TIERS as RESOURCE_TIERS,
-    gpu_memory, select_model, PressureTracker, DEFAULT_RESERVE_MIB, free_system_ram_mib)
-from .onboarding import (
-    OnboardingStore, OnboardingInstaller, validate_storage_root,
-    scan_environment, recommend, picker_start, picker_wait, picker_cancel)
-
 
 # Keep the plugin worker responsive while the host finishes its startup handshake.
 # Optional installer/model preparation begins only after the lifecycle hook has returned.
@@ -738,7 +779,6 @@ class MusicPerceptionPlugin(NekoPluginBase):
             return {"outcome": "process_changed", "note": "发声进程已变化，本次不猜测，放弃锁定。"}
         windows = []
         looked = []
-        app_name = str(locked.get("name") or "").strip().lower()
         # The window inventory is not reachable cross-plugin (see
         # _match_capturable_window). Ask the window plugin for its own best
         # media window instead of iterating refs we cannot obtain, then verify
@@ -1438,7 +1478,7 @@ class MusicPerceptionPlugin(NekoPluginBase):
                     "ram_free_mib": 0, "reserve_mib": int(getattr(self, '_resource_reserve_mib', 2048))}
         recommend_result = {}
         try:
-            from .adaptive_resources import gpu_memory, free_system_ram_mib
+            from .adaptive_resources import free_system_ram_mib, gpu_memory
             gpu = gpu_memory(timeout=1.8)
             ram = free_system_ram_mib()
             hardware = {"gpu_name": "", "gpu_available": bool(gpu.get('available')),
@@ -1469,9 +1509,9 @@ class MusicPerceptionPlugin(NekoPluginBase):
 
     def _onboarding_catalogs(self) -> dict:
         """把各档位的显存/大小估算汇总给 recommend（只读，不下载）。"""
-        from .stem_catalog import STEM_PROFILES
-        from .singing_catalog import PROFILES as SINGING_PROFILES
         from .model_assets import ASR_GPU_PLANS
+        from .singing_catalog import PROFILES as SINGING_PROFILES
+        from .stem_catalog import STEM_PROFILES
         video = {q: {"vram_mib": int(vram[0]), "bytes": 0}
                  for q, vram in ASR_GPU_PLANS.items()}
         singing = {q: {"vram_mib": int(d['suggested_free_vram_mib']),
@@ -1562,8 +1602,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
             except Exception:  # noqa: BLE001
                 pass
         try:
-            from .live2d_stage_server import (stop_all as _stop_stage_servers,
-                                              stop_bridge_server)
+            from .live2d_stage_server import stop_all as _stop_stage_servers
+            from .live2d_stage_server import stop_bridge_server
             _stop_stage_servers()
             stop_bridge_server()
         except Exception:  # noqa: BLE001 - 关停失败不影响插件卸载
@@ -1588,30 +1628,43 @@ class MusicPerceptionPlugin(NekoPluginBase):
         self._singing_activation_token = getattr(self, '_singing_activation_token', 0) + 1
         pending_singer=getattr(self,'_singing_activation_candidate',None)
         if pending_singer is not None:
-            try: pending_singer.close()
-            except Exception: pass
+            try:
+                pending_singer.close()
+            except Exception:
+                pass
         self._release_singing_session()
         candidate=getattr(self,'_singing_candidate_process',None)
         if candidate is not None and candidate.poll() is None:
-            try:candidate.terminate()
-            except OSError:pass
+            try:
+                candidate.terminate()
+            except OSError:
+                pass
         cancel=getattr(self,'_singing_prepare_cancel',None)
-        if cancel is not None:cancel.set()
+        if cancel is not None:
+            cancel.set()
         child=getattr(self,'_singing_prepare_process',None)
         if child is not None and child.poll() is None:
-            try:child.terminate();child.wait(timeout=2)
+            try:
+                child.terminate()
+                child.wait(timeout=2)
             except Exception:
-                try:child.kill()
-                except OSError:pass
+                try:
+                    child.kill()
+                except OSError:
+                    pass
         self._stop_stem_model_download()
         # Stop only our private GPU installer on plugin shutdown. Its .partial
         # wheel remains on disk for a later verified resume.
         stem_gpu_child=getattr(self,'_stem_gpu_install_process',None)
         if stem_gpu_child is not None and stem_gpu_child.poll() is None:
-            try: stem_gpu_child.terminate();stem_gpu_child.wait(timeout=2)
+            try:
+                stem_gpu_child.terminate()
+                stem_gpu_child.wait(timeout=2)
             except Exception:
-                try:stem_gpu_child.kill()
-                except OSError:pass
+                try:
+                    stem_gpu_child.kill()
+                except OSError:
+                    pass
         env = getattr(self, "_environment", None)
         if env is not None:
             env.stop()
@@ -1784,7 +1837,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
                             'path':str(saved_app.get('path') or '')[:2048],
                             'mode':selected_mode,
                             'might_contain_ai_tts':bool(saved_app.get('might_contain_ai_tts',False))}
-                except (TypeError,ValueError): pass
+                except (TypeError,ValueError):
+                    pass
             self._selected_capture_output_id = str(prefs.get('capture_output_id') or '')[:512]
             self._ai_output_routed_elsewhere = (prefs.get('ai_output_separate_device') is True
                 and bool(self._selected_capture_output_id))
@@ -1857,7 +1911,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
         if getattr(self,'_resource_monitor_thread',None) is not None:
             return
         stop = getattr(self,'_resource_monitor_stop',None)
-        if stop is None: return
+        if stop is None:
+            return
         def monitor():
             while not stop.is_set():
                 try:
@@ -1866,14 +1921,16 @@ class MusicPerceptionPlugin(NekoPluginBase):
                         self._resource_probe.update(measured)
                 except (OSError,ValueError,RuntimeError):
                     pass
-                if stop.wait(6.):break
+                if stop.wait(6.):
+                    break
         self._resource_monitor_thread=threading.Thread(target=monitor,
             name='neko-plugin-vram-monitor',daemon=True)
         self._resource_monitor_thread.start()
 
     def _stop_resource_monitor(self):
         stopped=getattr(self,'_resource_monitor_stop',None)
-        if stopped is not None:stopped.set()
+        if stopped is not None:
+            stopped.set()
         thread=getattr(self,'_resource_monitor_thread',None)
         if thread is not None and thread is not threading.current_thread():
             thread.join(timeout=2.5)
@@ -1886,8 +1943,7 @@ class MusicPerceptionPlugin(NekoPluginBase):
                                                   deep=False) is not None
                     for key in RESOURCE_TIERS}
         if domain=='video':
-            from .lyrics_model_store import (inspect_model_files,sidecar_stat_signature,
-                candidate_model_directories)
+            from .lyrics_model_store import candidate_model_directories, inspect_model_files, sidecar_stat_signature
             root=self.data_path('models')/'whisper_multilingual'
             output={}
             for key,model in QUALITY_MODEL.items():
@@ -1902,14 +1958,17 @@ class MusicPerceptionPlugin(NekoPluginBase):
                             saved=json.loads(saved_path.read_text('utf-8'))
                             if saved.get('state')=='ready':
                                 for directory,_ in candidate_model_directories(model,root):
-                                    if not directory.is_dir():continue
+                                    if not directory.is_dir():
+                                        continue
                                     w=(directory/'model.bin').stat()
                                     if (w.st_size==saved.get('weight_bytes') and
                                         w.st_mtime_ns==saved.get('weight_mtime_ns') and
                                         sidecar_stat_signature(directory,model)==saved.get('sidecar_signature')
                                         and saved.get('sidecar_signature')):
-                                        verified=True;break
-                    except (OSError,ValueError,TypeError):pass
+                                        verified=True
+                                        break
+                    except (OSError,ValueError,TypeError):
+                        pass
                 # An already running child passed the deep SHA preflight.
                 running=getattr(self,'_lyrics_session',None)
                 if (running is not None and getattr(running,'model_name',None)==model):
@@ -1926,19 +1985,22 @@ class MusicPerceptionPlugin(NekoPluginBase):
                     st=path.stat()
                     identity=(st.st_size,st.st_mtime_ns)
                 except OSError:
-                    output[key]=False;continue
+                    output[key]=False
+                    continue
                 cached=self._stem_verified_cache.get(key)
                 if cached is None or cached[0]!=identity:
                     checked=verify_stem_tier(path,key)
                     self._stem_verified_cache[key]=(identity,bool(checked))
                     output[key]=bool(checked)
-                else:output[key]=bool(cached[1])
+                else:
+                    output[key]=bool(cached[1])
             return output
         raise ValueError('Unsupported domain')
 
     def _resource_choice(self, domain):
         """No new download/activation; preferred model stays saved unchanged."""
-        if domain not in RESOURCE_DOMAINS:raise ValueError('invalid resource domain')
+        if domain not in RESOURCE_DOMAINS:
+            raise ValueError('invalid resource domain')
         if domain=='video':
             tier=getattr(self,'_lyrics_profile',None)
             desired=getattr(self,'_lyrics_device_preference','cpu') or 'cpu'
@@ -2778,9 +2840,11 @@ class MusicPerceptionPlugin(NekoPluginBase):
         if not self._asr_source_reviewed():
             return False
         with self._scene_lock:
-            if self._audio_scene.get('kind') != 'video': return False
+            if self._audio_scene.get('kind') != 'video':
+                return False
             video_id = self._video_session_id
-        if not video_id: return False
+        if not video_id:
+            return False
         if not self._ensure_lyrics_consumer_alive():
             return False
         q = self._lyrics_queue
@@ -2795,7 +2859,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
 
     def _process_video_speech(self, clip, expected_session, video_id, q):
         try:
-            if not self._video_clip_current(video_id,expected_session): return
+            if not self._video_clip_current(video_id,expected_session):
+                return
             cfg=self._live_session_config or {}
             if self._lyrics_profile is None:
                 self._video_last_error='尚未选择视频语音 Whisper 档位'
@@ -2806,7 +2871,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
                 self._video_last_error='模型仍在准备中'
                 return
             result=self._transcribe_live_audio_isolated(clip.samples,cfg)
-            if not self._video_clip_current(video_id,expected_session): return
+            if not self._video_clip_current(video_id,expected_session):
+                return
             cues=[]
             for item in (result.get('timed_cues') or [])[:12]:
                 text=str(item.get('text_preview') or '').strip()[:160]
@@ -2818,7 +2884,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
             window=decide_video_window(getattr(self,'_track_media_position_s',None),
                                        getattr(self,'_track_media_duration_s',None))
             with self._scene_lock:
-                if not self._video_clip_current(video_id,expected_session):return
+                if not self._video_clip_current(video_id,expected_session):
+                    return
                 # Keep only cues inside the automatically chosen window.
                 cues=[c for c in cues if window['start_s']<=c['at_s']<=window['end_s']]
                 existing=[] if not isinstance(self._video_transcript,dict) else self._video_transcript.get('cues',[])
@@ -2856,7 +2923,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
         if not self._ai_delivery or not self._auto_consented or self._plugin_paused:
             return False
         with self._scene_lock:
-            if self._audio_scene.get('kind') != 'video':return False
+            if self._audio_scene.get('kind') != 'video':
+                return False
         # ASR text is untrusted source content, not a command from the user.
         source=(dict(self._selected_application) if getattr(self,'_capture_mode','system')=='application'
                 else None)
@@ -3037,7 +3105,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
                     by_pid={int(p['pid']):p for p in all_processes}
                     selected_pid=int(selected['pid'])
                     for row in all_processes:
-                        if not row.get('host_ai'):continue
+                        if not row.get('host_ai'):
+                            continue
                         parent=int(row.get('parent_pid') or 0)
                         visited=set()
                         while parent>4 and parent not in visited:
@@ -3045,7 +3114,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
                             if parent==selected_pid:
                                 raise ListenerError('所选应用是 N.E.K.O 主程序的父进程，按进程树采集将混入 AI 声音；已阻止')
                             node=by_pid.get(parent)
-                            if node is None:break
+                            if node is None:
+                                break
                             parent=int(node.get('parent_pid') or 0)
                     worker_script = Path(__file__).resolve().parent / 'application_loopback_worker.py'
                     listener_options['source_factory'] = lambda: IsolatedApplicationLoopback(
@@ -3586,7 +3656,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
             self._player_lrc_lines=[]
             return
         title=str(info.get('title') or '').strip()
-        if not title:return
+        if not title:
+            return
         artist=str(info.get('artist') or '').strip()
         source=str(info.get('source') or '')
         new_key=(source,str(info.get('player') or ''),title.casefold(),
@@ -3606,8 +3677,10 @@ class MusicPerceptionPlugin(NekoPluginBase):
         self._player_metadata_unreliable_key=None
         position=info.get('position_s')
         if position is not None:
-            try:position=float(position)
-            except (TypeError,ValueError):position=None
+            try:
+                position=float(position)
+            except (TypeError,ValueError):
+                position=None
         stable_identity=trusted_song_identity(info)
         previous_key=self._track_metadata_key
         previous_pos=self._track_metadata_last
@@ -3640,7 +3713,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
                     roots,_=await self._roots()
                     self._player_lrc_lines=await asyncio.to_thread(
                         find_authorized_player_lrc,title,artist,roots)
-                except (OSError,RuntimeError,ValueError):pass
+                except (OSError,RuntimeError,ValueError):
+                    pass
         if changed or rewind:
             # Capture the OLD media clock, before the fresh track overwrites
             # it, so the last song can be recorded as interrupted mid-play.
@@ -3655,7 +3729,6 @@ class MusicPerceptionPlugin(NekoPluginBase):
             reused=self._song_memory.identify(self._song_current_id,stable_identity,title=title)
             if reused.get('reused'):
                 self._song_reused=True
-                model=QUALITY_MODEL.get(self._lyrics_profile or 'medium','base')
                 # Do not preload old lyrics until audio from this *position*
                 # is confirmed. Same track != same verse/chorus position.
                 self._track_lyrics_history=[]
@@ -3712,8 +3785,10 @@ class MusicPerceptionPlugin(NekoPluginBase):
             if getattr(self, '_lyrics_inflight', None) == (self._listener_session, sequence):
                 stale = getattr(self, '_singing_session', None)
                 if stale is not None:
-                    try: stale.close()
-                    except Exception: pass
+                    try:
+                        stale.close()
+                    except Exception:
+                        pass
         reuse = {'reused': False}
         if event=='track_ended' and old_song_id:
             old_clock=getattr(self,'_track_end_progress_snapshot',None)
@@ -3758,15 +3833,14 @@ class MusicPerceptionPlugin(NekoPluginBase):
         self._lyrics_last_ai_shared = None
         self._song_reused = bool(reuse.get('reused')) if event=='track_started' else False
         if self._song_reused and self._song_current_id:
-            cached_model=(SINGING_PROFILES[self._singing_profile]['id']
-                          if self._singing_profile in SINGING_PROFILES else 'singing-unavailable')
             # Position matching happens per audio clip, not here.
             self._track_lyrics_history=[]
         self._live_timeline = []
         self._live_last_ai_sequence = None
         self._live_last_ai_position = -1000.0
         for q in (getattr(self,'_background_queue',None),getattr(self,'_lyrics_queue',None)):
-            if q is None: continue
+            if q is None:
+                continue
             while True:
                 try:
                     q.get_nowait()
@@ -3935,15 +4009,12 @@ class MusicPerceptionPlugin(NekoPluginBase):
             self._lyrics_status = 'model_download_waiting_network'
             return False
         q=getattr(self,'_lyrics_queue',None)
-        if q is None or not self._ensure_lyrics_consumer_alive():return False
+        if q is None or not self._ensure_lyrics_consumer_alive():
+            return False
         # While a separate worker is acquiring the SAME public model, don't
         # let live ASR concurrently download into that model folder. Continue
         # listening, and let the next confirmed-music clip use the verified
         # local weights after background preparation finishes.
-        preparing = getattr(self, '_lyrics_prepare_thread', None)
-        preparation_state = getattr(self, '_lyrics_prepare_state', {})
-        chosen_model = (getattr(self,'_live_session_config',None) or {}).get(
-            'lyrics_model', QUALITY_MODEL.get(self._lyrics_profile or 'medium','base'))
         # Song ASR weights are wholly separate; a VIDEO model download must
         # not suppress singer events. Song preparation is gated in the song worker.
         if (getattr(self,'_singing_prepare_thread',None) is not None and
@@ -3976,14 +4047,19 @@ class MusicPerceptionPlugin(NekoPluginBase):
             q.put_nowait((clip_for_asr,context,expected_session,
                           getattr(self,'_lyrics_quality_generation',0)))
         except queue.Full:
-            try:q.get_nowait();q.task_done()
-            except queue.Empty:pass
+            try:
+                q.get_nowait()
+                q.task_done()
+            except queue.Empty:
+                pass
             # Retain the same enriched audio that capture offsets describe.
             # Using the original clip here would shift ASR timestamps by the
             # overlap duration precisely when the queue is under pressure.
-            try:q.put_nowait((clip_for_asr,context,expected_session,
-                                   getattr(self,'_lyrics_quality_generation',0)))
-            except queue.Full:return False
+            try:
+                q.put_nowait((clip_for_asr,context,expected_session,
+                              getattr(self,'_lyrics_quality_generation',0)))
+            except queue.Full:
+                return False
         self._lyrics_status='queued'
         self._note_lyrics_progress(clip, 'queued')
         return True
@@ -4005,7 +4081,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
         for key, source in [('raw','vocals'),('enhanced','enhanced_vocals'),
                             ('instrumental','instrumental')]:
             data=np.asarray(separated.get(source,[]),dtype=np.float32).reshape(-1)
-            if data.size==0 or not np.isfinite(data).all():return
+            if data.size==0 or not np.isfinite(data).all():
+                return
             # Store last 7 seconds as 16-bit PCM to cap exposure and memory.
             takes[key]=(np.clip(data[-112000:],-1.,1.)*32767).astype('<i2').tobytes()
         with self._stem_preview_lock:
@@ -4057,16 +4134,20 @@ class MusicPerceptionPlugin(NekoPluginBase):
                 prev=getattr(self,'_stem_effective_session',None)
                 target=(chosen['quality'],chosen['device'])
                 if session is not None and prev!=target:
-                    session.close();self._stem_session=None;session=None
+                    session.close()
+                    self._stem_session=None
+                    session=None
                 if session is None:
                     env=getattr(self,'_environment',None)
-                    if env is None: raise StemWorkerError('独立环境未就绪')
+                    if env is None:
+                        raise StemWorkerError('独立环境未就绪')
                     python,vendor=env.worker_runtime()
                     active={'proc':None}
                     def track(child):
                         with self._analysis_children_lock:
                             previous=active['proc']
-                            if previous is not None: self._analysis_children.discard(previous)
+                            if previous is not None:
+                                self._analysis_children.discard(previous)
                             active['proc']=child
                             if child is not None:
                                 self._analysis_children.add(child)
@@ -4113,7 +4194,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
                                   'error':f'{type(exc).__name__}: {str(exc)[:160]}'}
                 session=self._stem_session
                 self._stem_session=None
-                if session is not None: session.close()
+                if session is not None:
+                    session.close()
                 return None
         finally:
             self._stem_session_lock.release()
@@ -4123,8 +4205,10 @@ class MusicPerceptionPlugin(NekoPluginBase):
         self._singing_session=None
         self._singing_runtime_device=None
         if session is not None:
-            try:session.close()
-            except Exception:pass
+            try:
+                session.close()
+            except Exception:
+                pass
 
     def _transcribe_singing_live_audio_isolated(self,samples,cfg):
         """MUSIC only: no video Whisper resident while singer is loaded."""
@@ -4172,7 +4256,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
         if session is not None and (getattr(session,'_closed',False) or
              session.model_name!=model or session.device!=plan['device'] or
              getattr(session,'placement','standard')!=plan.get('placement','standard')):
-            self._release_singing_session();session=None
+            self._release_singing_session()
+            session=None
         if session is None:
             venv,python_exe,vendor=singing_venv_paths(self.data_path('environment'))
             if not python_exe.is_file() or not vendor.is_dir():
@@ -4229,7 +4314,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
                         for key in ('bytes_received','total_bytes','progress_pct',
                                     'progress_estimated','speed_bytes_s','eta_seconds',
                                     'stalled','source_name','updated_at','last_progress_at'):
-                            if key in event:preparation[key]=event[key]
+                            if key in event:
+                                preparation[key]=event[key]
                         if event.get('state')=='failed' and preparation.get('state')!='interrupted':
                             preparation['state']='failed'
                             preparation['error']=str(event.get('error',''))[:180]
@@ -4303,7 +4389,6 @@ class MusicPerceptionPlugin(NekoPluginBase):
                 if getattr(self,'_shutdown_requested',False):
                     return
                 update('model_download_and_sha')
-                import subprocess as _subprocess
                 args=[str(exe),'-I',str(Path(__file__).resolve().parent/'singing_prepare_worker.py'),
                       str(vendor),str(root),quality,source]
                 from .singing_install import _launch
@@ -4345,8 +4430,10 @@ class MusicPerceptionPlugin(NekoPluginBase):
         self._singing_prepare_cancel.set()
         child=getattr(self,'_singing_prepare_process',None)
         if child is not None and child.poll() is None:
-            try:child.terminate()
-            except OSError:pass
+            try:
+                child.terminate()
+            except OSError:
+                pass
         return Ok({'ok':True,'state':'cancelling',
                    'note':'已请求取消；等待安装子进程结束后可安全卸载独立环境'})
 
@@ -4373,18 +4460,24 @@ class MusicPerceptionPlugin(NekoPluginBase):
                 child=getattr(self,'_singing_prepare_process',None)
                 if child is not None and child.poll() is None:
                     child.terminate()
-                    try:child.wait(timeout=4)
+                    try:
+                        child.wait(timeout=4)
                     except Exception:
-                        child.kill();child.wait(timeout=3)
+                        child.kill()
+                        child.wait(timeout=3)
                 candidate=getattr(self,'_singing_activation_candidate',None)
                 if candidate is not None:
-                    try:candidate.close()
-                    except Exception:pass
+                    try:
+                        candidate.close()
+                    except Exception:
+                        pass
                 check=getattr(self,'_singing_candidate_process',None)
                 if check is not None and check.poll() is None:
                     check.terminate()
-                    try:check.wait(timeout=4)
-                    except Exception:check.kill()
+                    try:
+                        check.wait(timeout=4)
+                    except Exception:
+                        check.kill()
                 for thread_name in ('_singing_prepare_thread','_singing_activation_thread'):
                     other=getattr(self,thread_name,None)
                     if other is not None and other is not threading.current_thread() and other.is_alive():
@@ -4559,7 +4652,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
                             'device':device,'placement':candidate_policy.get('placement','standard'),
                             'stage':'actual_inference_verified',
                             'note':'模型已完成设备试推理；5%错误率仍待真实歌词测试'}
-                        if listen_to_music:candidate=None
+                        if listen_to_music:
+                            candidate=None
             except Exception as exc:
                 if self._singing_activation_token==token:
                     self._singing_activation_state={'state':'failed','quality':quality,
@@ -4568,8 +4662,10 @@ class MusicPerceptionPlugin(NekoPluginBase):
             finally:
                 self._singing_activation_candidate=None
                 if candidate is not None:
-                    try:candidate.close()
-                    except Exception:pass
+                    try:
+                        candidate.close()
+                    except Exception:
+                        pass
         thread=threading.Thread(target=task,daemon=True,name='neko-singing-asr-preflight')
         self._singing_activation_thread=thread
         thread.start()
@@ -4745,8 +4841,10 @@ class MusicPerceptionPlugin(NekoPluginBase):
                 if pending is not None and self._lyrics_switch_state.get('status')=='preparing':
                     self._lyrics_switch_state={'status':'idle','message':'已停止歌词模型切换'}
             if pending is not None:
-                try:pending.close()
-                except Exception:pass
+                try:
+                    pending.close()
+                except Exception:
+                    pass
         self._reap_retired_lyrics_sessions()
         session=getattr(self,'_lyrics_session',None)
         self._lyrics_session=None
@@ -4785,8 +4883,11 @@ class MusicPerceptionPlugin(NekoPluginBase):
             q = self._lyrics_queue
             # Drop stale packets, but never create a second concurrent worker.
             while True:
-                try: q.get_nowait(); q.task_done()
-                except queue.Empty: break
+                try:
+                    q.get_nowait()
+                    q.task_done()
+                except queue.Empty:
+                    break
             thread = threading.Thread(target=self._background_lyrics_main,
                 args=(self._listener_session, q, self._lyrics_stop),
                 name='neko-singing-recognizer-recovered',daemon=True)
@@ -4820,10 +4921,13 @@ class MusicPerceptionPlugin(NekoPluginBase):
                         lock=getattr(self,'_asr_residency_lock',None)
                         if lock is not None and lock.acquire(blocking=False):
                             try:
-                                if pending in {'video','both'}:self._release_lyrics_model()
-                                if pending in {'singing','both'}:self._release_singing_session()
+                                if pending in {'video','both'}:
+                                    self._release_lyrics_model()
+                                if pending in {'singing','both'}:
+                                    self._release_singing_session()
                                 self._asr_release_requested=None
-                            finally:lock.release()
+                            finally:
+                                lock.release()
                     # Free model RAM when no confirmed music has needed ASR
                     # for 90s. No polling inference or GPU use while idle.
                     if (time.monotonic()-last_work_at>90):
@@ -4842,9 +4946,11 @@ class MusicPerceptionPlugin(NekoPluginBase):
     def _process_one_lyrics_task(self,clip,context,expected_session,session,q,
                                 quality_generation=None):
         try:
-            if not self._clip_is_current(clip,session):return
+            if not self._clip_is_current(clip,session):
+                return
             if (quality_generation is not None and
-                    quality_generation != self._lyrics_quality_generation):return
+                    quality_generation != self._lyrics_quality_generation):
+                return
             # A model download can be in progress while real music continues
             # through WASAPI and the rhythm analyzer. Never launch a second
             # Whisper child that fights the downloader over partial weights.
@@ -5174,11 +5280,13 @@ class MusicPerceptionPlugin(NekoPluginBase):
 
     def _stop_background_processor(self):
         lyric_stop = getattr(self, '_lyrics_stop', None)
-        if lyric_stop is not None: lyric_stop.set()
+        if lyric_stop is not None:
+            lyric_stop.set()
         # Stop ASR and free its memory even if a model download/inference is
         # underway. The next approved music session will lazily reopen it.
         release=getattr(self,'_release_lyrics_model',None)
-        if callable(release):release()
+        if callable(release):
+            release()
         stem_session=getattr(self,'_stem_session',None)
         if stem_session is not None:
             stem_session.close()
@@ -5314,7 +5422,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
                 {'rhythm_estimate': {'bpm': None}, 'stage': 'auxiliary_processing',
                  'warning': '辅助特征尚未处理完成；AI 可以直接利用频谱'},
                 capture)
-            if not self._clip_is_current(clip,expected_session): return
+            if not self._clip_is_current(clip,expected_session):
+                return
             self._recent_auditory_context = context
             self._auditory_history.append(context)
             current_song=getattr(self,'_song_current_id',None)
@@ -5792,16 +5901,19 @@ class MusicPerceptionPlugin(NekoPluginBase):
     async def _automatic_audio_check_task(self, *, lightweight: bool = False):
         try:
             env=getattr(self,'_environment',None)
-            if env is None:raise RuntimeError('插件运行环境未初始化')
+            if env is None:
+                raise RuntimeError('插件运行环境未初始化')
             status=env.snapshot()
             if not status.get('ready') or not status.get('model_ready'):
                 self._auto_health={'state':'running','stage':'自动修复环境与YAMNet'}
                 repair=await self.repair_environment()
                 info=repair.value if hasattr(repair,'value') else repair
-                if info.get('ok') is False:raise RuntimeError(info.get('error') or '环境修复启动失败')
+                if info.get('ok') is False:
+                    raise RuntimeError(info.get('error') or '环境修复启动失败')
                 task=getattr(self,'_environment_task',None)
                 if task is not None:
-                    try: await asyncio.wait_for(asyncio.shield(task),timeout=240)
+                    try:
+                        await asyncio.wait_for(asyncio.shield(task),timeout=240)
                     except asyncio.TimeoutError:
                         raise RuntimeError('环境修复超过240秒，请检查网络及 install_diagnostics.log')
             status=env.snapshot()
@@ -5873,7 +5985,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
                     report_file=self.data_path('lyrics_self_check.json')
                     try:
                         content=report_file.read_bytes()
-                        if len(content)>131072:raise ValueError('诊断报告大小异常')
+                        if len(content)>131072:
+                            raise ValueError('诊断报告大小异常')
                         probe=json.loads(content)
                     except (OSError,UnicodeError,ValueError,TypeError) as exc:
                         raise RuntimeError('推理检测结果无法读取，请检查歌词诊断文件') from exc
@@ -6089,7 +6202,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
             'limit':{'type':'integer','minimum':1,'maximum':32}}},
         timeout=8.0)
     async def cog_poll_v1(self,cursor:str='',limit:int=20,**_):
-        import hashlib, json
+        import hashlib
+        import json
         from datetime import datetime, timedelta, timezone
         def batch(status,reason='',message='',observations=None,next_cursor=''):
             return Ok({'schema_version':'cognition.observation.v1','source_plugin':'music_perception',
@@ -6217,7 +6331,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
         updated={'state':state,'reason':reason,'updated_at':round(time.time(),1),
                  'retry_in_s':round(max(0.,getattr(self,'_capture_recovery_retry_at',0.0)
                                             -time.monotonic()),1)}
-        if error:updated['error']=str(error)[:240]
+        if error:
+            updated['error']=str(error)[:240]
         if (old.get('state'),old.get('reason'),old.get('error')) != (
                 updated['state'],updated['reason'],updated.get('error')):
             self._capture_recovery=updated
@@ -6246,7 +6361,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
                             reason=passive_reason
                     except (OSError,RuntimeError,ValueError,TypeError) as exc:
                         self._passive_rebind_last_reason='process_probe_'+type(exc).__name__
-            if match is None:return False,reason
+            if match is None:
+                return False,reason
             if not verify_selected_process(int(match['pid']),str(match['created'])):
                 return False,'replacement_process_changed'
             if match.get('host_ai') or not match.get('path'):
@@ -6373,16 +6489,20 @@ class MusicPerceptionPlugin(NekoPluginBase):
                         with self._app_scan_lock:
                             self._audible_scan_error=type(exc).__name__ + ': '+str(exc)[:130]
                             self._app_catalog_cache=[]  # Fail closed, never show every process.
-                        try:self._maybe_schedule_capture_recovery([])
-                        except Exception:pass
-                if stop.wait(5):break
+                        try:
+                            self._maybe_schedule_capture_recovery([])
+                        except Exception:
+                            pass
+                if stop.wait(5):
+                    break
         thread=threading.Thread(target=work,name='neko-audible-source-meter',daemon=True)
         self._audible_scanner_thread=thread
         thread.start()
 
     def _stop_audible_scanner(self):
         stop=getattr(self,'_audible_scanner_stop',None)
-        if stop is not None:stop.set()
+        if stop is not None:
+            stop.set()
         thread=getattr(self,'_audible_scanner_thread',None)
         if thread is not None and thread is not threading.current_thread():
             thread.join(timeout=2)
@@ -6399,7 +6519,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
             return Ok({'ok':False,'error':'当前监听已停止或 AI 私有感知未启用'})
         result=await self.list_application_sources()
         data=result.value if hasattr(result,'value') else result
-        if not data.get('ok'): return Ok(data)
+        if not data.get('ok'):
+            return Ok(data)
         return Ok({'ok':True,'sources':[{
             'source_id':make_source_id(app),'name':app.get('name',''),
             'label':app.get('tag','unknown'),
@@ -6704,8 +6825,10 @@ class MusicPerceptionPlugin(NekoPluginBase):
         if not app or len(app)>160 or role not in {'music','video','ai','unknown'}:
             return Ok({'ok':False,'error':'请选择有效应用标识及角色'})
         with self._scene_lock:
-            if role=='unknown':self._source_role_overrides.pop(app,None)
-            else:self._source_role_overrides[app]=role
+            if role=='unknown':
+                self._source_role_overrides.pop(app,None)
+            else:
+                self._source_role_overrides[app]=role
             if len(self._source_role_overrides)>32:
                 self._source_role_overrides.pop(next(iter(self._source_role_overrides)))
             self._media_source_updated=0.0  # recheck before trusting source
@@ -6869,8 +6992,10 @@ class MusicPerceptionPlugin(NekoPluginBase):
         self._singing_activation_token += 1
         pending_singer=getattr(self,'_singing_activation_candidate',None)
         if pending_singer is not None:
-            try:pending_singer.close()
-            except Exception:pass
+            try:
+                pending_singer.close()
+            except Exception:
+                pass
         self._release_singing_session()
         self._on_scene_change({'kind':'unknown','verified':False,
             'reason':'plugin_paused','source_count':0})
@@ -6900,11 +7025,14 @@ class MusicPerceptionPlugin(NekoPluginBase):
                 try:
                     if child.poll() is None:
                         child.terminate()
-                        try: child.wait(timeout=2)
+                        try:
+                            child.wait(timeout=2)
                         except Exception:
                             child.kill()
-                            try: child.wait(timeout=1)
-                            except Exception: pass
+                            try:
+                                child.wait(timeout=1)
+                            except Exception:
+                                pass
                     if child.poll() is None:
                         lingering.append(getattr(child, 'pid', None))
                     else:
@@ -6985,7 +7113,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
                 saved=json.loads(path.read_text('utf-8'))
                 if saved.get('schema')=='music_stem_download_v1':
                     status.update(saved)
-        except (OSError,ValueError,TypeError,UnicodeError):pass
+        except (OSError,ValueError,TypeError,UnicodeError):
+            pass
         thread=getattr(self,'_stem_download_thread',None)
         active=bool(thread and thread.is_alive())
         status['running']=active
@@ -7006,7 +7135,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
             elif not path.is_file() and status.get('state')=='ready':
                 status['state']='missing'
         except OSError:
-            if status.get('state')=='ready': status['state']='missing'
+            if status.get('state')=='ready':
+                status['state']='missing'
             status['sha256_verified']=False
         status['model']=model
         return status
@@ -7017,8 +7147,10 @@ class MusicPerceptionPlugin(NekoPluginBase):
             self._stem_download_process=None
         if child is not None:
             try:
-                if child.poll() is None: child.terminate()
-            except (OSError,ValueError):pass
+                if child.poll() is None:
+                    child.terminate()
+            except (OSError,ValueError):
+                pass
 
     def _stem_download_background(self,source,quality=DEFAULT_STEM_QUALITY):
         import subprocess
@@ -7038,9 +7170,12 @@ class MusicPerceptionPlugin(NekoPluginBase):
             last_signature=None
             code=None
             while code is None:
-                try:code=child.wait(timeout=2)
-                except subprocess.TimeoutExpired: code=None
-                if code is not None:break
+                try:
+                    code=child.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    code=None
+                if code is not None:
+                    break
                 state=self._stem_download_snapshot()
                 signature=(state.get('stage'),state.get('source'),state.get('bytes_received'))
                 if signature!=last_signature:
@@ -7048,8 +7183,10 @@ class MusicPerceptionPlugin(NekoPluginBase):
                     last_signature=signature
                 if time.monotonic()-changed>420 or time.monotonic()-started>7200:
                     child.terminate()
-                    try:child.wait(timeout=3)
-                    except subprocess.TimeoutExpired:child.kill()
+                    try:
+                        child.wait(timeout=3)
+                    except subprocess.TimeoutExpired:
+                        child.kill()
                     code=1
                     self._stem_download_state={ 'state':'failed',
                         'message':'分离模型下载长时间无进度；已保留断点，可重试'}
@@ -7069,7 +7206,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
                 'message':'无法准备模型下载进程：'+type(exc).__name__}
         finally:
             with self._stem_download_lock:
-                if self._stem_download_process is child:self._stem_download_process=None
+                if self._stem_download_process is child:
+                    self._stem_download_process=None
 
     def _write_stem_download_summary(self,fields):
         try:
@@ -7079,7 +7217,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
             temp=target.with_name(target.name+'.new')
             temp.write_text(json.dumps(payload,ensure_ascii=False),encoding='utf-8')
             os.replace(temp,target)
-        except OSError:pass
+        except OSError:
+            pass
 
     @ui.action(id='start_stem_download',label='下载人声分离模型',refresh_context=True)
     @plugin_entry(id='start_stem_download',name='确认后下载并校验人声分离模型',
@@ -7411,7 +7550,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
         try:
             if status_path.is_file() and status_path.stat().st_size < 16_384:
                 recorded=json.loads(status_path.read_text(encoding='utf-8'))
-        except (OSError,ValueError,TypeError):pass
+        except (OSError,ValueError,TypeError):
+            pass
         thread=getattr(self,'_stem_gpu_install_thread',None)
         active=bool(thread and thread.is_alive())
         if recorded.get('state')=='running' and not active:
@@ -7438,8 +7578,10 @@ class MusicPerceptionPlugin(NekoPluginBase):
         env=getattr(self,'_environment',None)
         if env is None or not env.snapshot().get('ready'):
             return Ok({'ok':False,'error':'请先等待独立音频 Python 环境检查完成'})
-        try:python,vendor=env.worker_runtime()
-        except Exception as exc:return Ok({'ok':False,'error':'独立 Python 未就绪：'+str(exc)[:120]})
+        try:
+            python,vendor=env.worker_runtime()
+        except Exception as exc:
+            return Ok({'ok':False,'error':'独立 Python 未就绪：'+str(exc)[:120]})
         install_path=self.data_path('environment')/'stem_gpu_install_status.json'
         source=getattr(self,'_download_source_preference','mirror')
         def task():
@@ -7458,7 +7600,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
                     with self._stem_session_lock:
                         old=self._stem_session
                         self._stem_session=None
-                        if old is not None:old.close()
+                        if old is not None:
+                            old.close()
                     self._stem_faulted=False
                     self._stem_state={'state':'ready','actual_device':None,'error':None,
                                       'warning':'GPU 加速包已安装；下一段重新建立模型会话，仍需实际推理验证'}
@@ -7466,13 +7609,19 @@ class MusicPerceptionPlugin(NekoPluginBase):
                 from .stem_gpu_runtime import _status as gpu_status_write
                 child=getattr(self,'_stem_gpu_install_process',None)
                 if child is not None and child.poll() is None:
-                    try: child.terminate();child.wait(timeout=2)
+                    try:
+                        child.terminate()
+                        child.wait(timeout=2)
                     except Exception:
-                        try:child.kill()
-                        except OSError:pass
-                try: gpu_status_write(install_path,state='failed',stage='supervisor',progress_pct=0,
-                                       message=f'{type(exc).__name__}: {str(exc)[:190]}')
-                except OSError: pass
+                        try:
+                            child.kill()
+                        except OSError:
+                            pass
+                try:
+                    gpu_status_write(install_path,state='failed',stage='supervisor',progress_pct=0,
+                                     message=f'{type(exc).__name__}: {str(exc)[:190]}')
+                except OSError:
+                    pass
             finally:
                 self._stem_gpu_install_process=None
         self._stem_gpu_install_thread=threading.Thread(target=task,name='stem-gpu-install',daemon=True)
@@ -7490,8 +7639,10 @@ class MusicPerceptionPlugin(NekoPluginBase):
         if getattr(self,'_stem_gpu_install_thread',None) and self._stem_gpu_install_thread.is_alive():
             return Ok({'ok':False,'error':'GPU 运行包正在安装，完成后再检测'})
         env=getattr(self,'_environment',None)
-        try:python,vendor=env.worker_runtime()
-        except Exception as exc:return Ok({'ok':False,'error':'独立音频环境未就绪：'+str(exc)[:160]})
+        try:
+            python,vendor=env.worker_runtime()
+        except Exception as exc:
+            return Ok({'ok':False,'error':'独立音频环境未就绪：'+str(exc)[:160]})
         overlay=stem_gpu_overlay_path(self.data_path('environment'))
         active=bool(getattr(self,'_stem_session',None) and self._stem_session.running)
         weight=self._stem_model_path()
@@ -7507,7 +7658,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
                 temp=check_path.with_name(check_path.name+'.tmp')
                 temp.write_text(json.dumps(payload,ensure_ascii=False)[:12_000],encoding='utf-8')
                 os.replace(temp,check_path)
-            except (OSError,TypeError,ValueError):pass
+            except (OSError,TypeError,ValueError):
+                pass
         def task():
             import subprocess
             try:
@@ -7528,7 +7680,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
                     import re
                     lines=[x.strip()[:230] for x in completed.stderr.splitlines()
                            if re.search(r'cuda|cudnn|cublas|provider|dll|onnxruntime', x, re.I)]
-                    if lines: result['native_loader_hint']=' | '.join(lines[-2:])[:460]
+                    if lines:
+                        result['native_loader_hint']=' | '.join(lines[-2:])[:460]
                 finish(result)
             except Exception as exc:
                 finish({'state':'failed','error':f'{type(exc).__name__}: {str(exc)[:180]}'})
@@ -7609,8 +7762,10 @@ class MusicPerceptionPlugin(NekoPluginBase):
             self._lyrics_catalog.pop(model,None)
         try:
             prep=self.data_path('lyrics_model_prepare_'+model+'.json')
-            if prep.is_file():prep.unlink()
-        except OSError:pass
+            if prep.is_file():
+                prep.unlink()
+        except OSError:
+            pass
         return Ok({**result,'note':'此档位的插件专属模型已清理；其他档位、环境和两首歌记录不变'})
 
     @ui.action(id='uninstall_stem_model',label='卸载分离模型',refresh_context=True)
@@ -7634,16 +7789,19 @@ class MusicPerceptionPlugin(NekoPluginBase):
                 return Ok({'ok':False,'error':'此模型被分离进程占用，确认自动暂停插件并释放文件后重试'})
             if getattr(self,'_auto_consented',False) and not self._plugin_paused:
                 paused=await self.pause_plugin()
-                if hasattr(paused,'value') and paused.value.get('ok') is False:return paused
+                if hasattr(paused,'value') and paused.value.get('ok') is False:
+                    return paused
             with self._stem_session_lock:
-                if self._stem_session is not None:self._stem_session.close()
+                if self._stem_session is not None:
+                    self._stem_session.close()
                 self._stem_session=None
         try:
             result=await asyncio.to_thread(remove_stem_model,
                         self._stem_model_path(quality).parent,quality)
         except OSError as exc:
             return Ok({'ok':False,'error':'Windows 文件占用或路径不安全：'+type(exc).__name__})
-        if not result.get('ok'):return Ok(result)
+        if not result.get('ok'):
+            return Ok(result)
         if current:
             self._stem_enabled=False
             self._stem_faulted=False
@@ -7686,10 +7844,14 @@ class MusicPerceptionPlugin(NekoPluginBase):
         pcm=snap.get('tracks',{}).get(stage)
         if not pcm or len(pcm)>225000:
             return Ok({'ok':False,'error':'试听缓存不存在或超出允许范围'})
-        import base64,io,wave
+        import base64
+        import io
+        import wave
         buffer=io.BytesIO()
         with wave.open(buffer,'wb') as wav:
-            wav.setnchannels(1);wav.setsampwidth(2);wav.setframerate(16000)
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(16000)
             wav.writeframes(pcm)
         return Ok({'ok':True,'stage':stage,'duration_s':round(len(pcm)/32000,2),
                    'model':snap.get('model'),'strength':snap.get('strength'),
@@ -7799,7 +7961,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
         with self._stem_session_lock:
             old=self._stem_session
             self._stem_session=None
-            if old is not None:old.close()
+            if old is not None:
+                old.close()
             self._stem_quality=quality
             self._stem_effective_session=None
             self._stem_verified_cache.pop(quality,None)
@@ -7992,19 +8155,24 @@ class MusicPerceptionPlugin(NekoPluginBase):
             self._lyrics_preparing_session=None
             self._lyrics_switch_state={'status':'cancelled','message':'已保留原来的歌词模型'}
         if pending is not None:
-            try:pending.close()
-            except Exception:pass
+            try:
+                pending.close()
+            except Exception:
+                pass
         return True
 
     def _reap_retired_lyrics_sessions(self):
         lock=getattr(self,'_lyrics_switch_lock',None)
-        if lock is None:return
+        if lock is None:
+            return
         with lock:
             retired=list(getattr(self,'_lyrics_retired_sessions',[]))
             self._lyrics_retired_sessions=[]
         for item in retired:
-            try:item.close()
-            except Exception:pass
+            try:
+                item.close()
+            except Exception:
+                pass
 
     def _begin_lyrics_switch(self, *, quality: str, device: str):
         """Keep the current model serving until a private standby passes warmup.
@@ -8020,8 +8188,10 @@ class MusicPerceptionPlugin(NekoPluginBase):
             self._lyrics_switch_state={'status':'preparing', 'quality':quality,
                                        'device':device,'message':'新模型正在后台下载/预热；旧模型继续识别'}
         if abandoned is not None:
-            try:abandoned.close()
-            except Exception:pass
+            try:
+                abandoned.close()
+            except Exception:
+                pass
         worker=threading.Thread(target=self._run_lyrics_switch,
                 args=(token,quality,device),
                 name='neko-lyrics-standby-switch',daemon=True)
@@ -8115,7 +8285,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
                         if isinstance(self._recent_auditory_context,dict):
                             scenes.append(self._recent_auditory_context)
                         for scene in scenes:
-                            if not isinstance(scene,dict):continue
+                            if not isinstance(scene,dict):
+                                continue
                             scene.pop('lyrics_understanding',None)
                             timeline=scene.get('musical_event_timeline')
                             if isinstance(timeline,dict):
@@ -8151,8 +8322,10 @@ class MusicPerceptionPlugin(NekoPluginBase):
                                                ('预热未完成，已保留旧模型：'+type(exc).__name__+': '+str(exc)[:170])}
         finally:
             if prepared is not None:
-                try:prepared.close()
-                except Exception:pass
+                try:
+                    prepared.close()
+                except Exception:
+                    pass
             with self._lyrics_switch_lock:
                 if self._lyrics_preparing_session is prepared:
                     self._lyrics_preparing_session=None
@@ -8253,8 +8426,12 @@ class MusicPerceptionPlugin(NekoPluginBase):
                             # verdict, with unchanged size AND nanosecond
                             # mtime, and with complete valid CT2 sidecars.
                             # Activation rehashes before loading.
-                            from .lyrics_model_store import (candidate_model_directories,
-                                sidecar_stat_signature, REQUIRED_FILES, validate_sidecar_file)
+                            from .lyrics_model_store import (
+                                REQUIRED_FILES,
+                                candidate_model_directories,
+                                sidecar_stat_signature,
+                                validate_sidecar_file,
+                            )
                             intact = False
                             for folder, origin in candidate_model_directories(model,root):
                                 try:
@@ -8370,8 +8547,9 @@ class MusicPerceptionPlugin(NekoPluginBase):
         # Record the verified file identity for inexpensive Hosted-UI reads.
         # Do not write a green badge until the full SHA and sidecars passed.
         try:
-            from .lyrics_model_store import sidecar_stat_signature
             import json as _json
+
+            from .lyrics_model_store import sidecar_stat_signature
             verified_path=Path(verified)
             weight=verified_path/'model.bin'
             stat=weight.stat()
@@ -9129,7 +9307,7 @@ class MusicPerceptionPlugin(NekoPluginBase):
                         (selected is None or saved.get('model')==selected)):
                     # A previous completed download is useful, but a stale
                     # 'running' record from an earlier process is not live.
-                    if not (memory.get('state') in {'queued','running'}):
+                    if memory.get('state') not in {'queued','running'}:
                         memory = saved
                     else:
                         memory['stage'] = saved.get('stage',memory.get('stage'))
@@ -9141,8 +9319,12 @@ class MusicPerceptionPlugin(NekoPluginBase):
         # UI poll; the downloader still verifies the official SHA-256.
         if memory.get('state') == 'ready':
             try:
-                from .lyrics_model_store import (MODELS, REQUIRED_FILES,
-                    candidate_model_directories, _sidecar_present_cheap)
+                from .lyrics_model_store import (
+                    MODELS,
+                    REQUIRED_FILES,
+                    _sidecar_present_cheap,
+                    candidate_model_directories,
+                )
                 model=QUALITY_MODEL.get(getattr(self,'_lyrics_profile',None))
                 spec=MODELS.get(model) if model else None
                 if spec:
@@ -9238,7 +9420,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
                     try:
                         if child.poll() is None:
                             child.terminate()
-                    except (OSError,ValueError):pass
+                    except (OSError,ValueError):
+                        pass
                 self._lyrics_prepare_state={'state':'queued','model':selected,
                                           'stage':'waiting_previous_model'}
                 return {'ok':True,'queued_for_switch':True,'model':selected}
@@ -9281,7 +9464,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
                 try:
                     if child.poll() is None:
                         child.terminate()
-                except (OSError,ValueError):pass
+                except (OSError,ValueError):
+                    pass
             # Large models may take time on limited networks; keep the task
             # background-only and bounded; stop() terminates this child.
             # Do not kill a slow but PROGRESSING 1.6GB transfer at a fixed
@@ -9329,21 +9513,26 @@ class MusicPerceptionPlugin(NekoPluginBase):
                         child.terminate()
                         child.wait(timeout=3)
                     except (OSError,subprocess.TimeoutExpired):
-                        try:child.kill();child.wait(timeout=2)
-                        except (OSError,subprocess.TimeoutExpired):pass
+                        try:
+                            child.kill()
+                            child.wait(timeout=2)
+                        except (OSError,subprocess.TimeoutExpired):
+                            pass
                     code=1
                     # The terminated child cannot report its own failure. Keep
                     # the public reason and last real bytes in the status file.
                     try:
                         previous=json.loads(status_file.read_text('utf-8')) if status_file.is_file() else {}
-                        if not isinstance(previous,dict):previous={}
+                        if not isinstance(previous,dict):
+                            previous={}
                         previous.update(schema='music_model_prepare_v1',model=model,
                                         state='failed',stage='stalled',phase='stalled',
                                         message=stall_reason,updated_at=int(time.time()))
                         temp=status_file.with_name(status_file.name+'.new')
                         temp.write_text(json.dumps(previous,ensure_ascii=False),encoding='utf-8')
                         temp.replace(status_file)
-                    except (OSError,ValueError,TypeError,UnicodeError):pass
+                    except (OSError,ValueError,TypeError,UnicodeError):
+                        pass
                     break
             # If the OS or a native downloader crashed before writing a
             # final status, preserve the last real byte counter and surface
@@ -9358,7 +9547,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
                         temp=status_file.with_name(status_file.name+'.new')
                         temp.write_text(json.dumps(previous,ensure_ascii=False),encoding='utf-8')
                         temp.replace(status_file)
-                except (OSError,ValueError,TypeError,UnicodeError):pass
+                except (OSError,ValueError,TypeError,UnicodeError):
+                    pass
             # Worker has already written the real bytes and the SHA verdict.
             # Keep a separate per-model record; do not turn a failed/cancelled
             # attempt into a misleading 'complete' message.
@@ -9378,8 +9568,11 @@ class MusicPerceptionPlugin(NekoPluginBase):
                 self._lyrics_retry_after=0.0
         except subprocess.TimeoutExpired:
             if child is not None:
-                try:child.kill();child.wait(timeout=2)
-                except (OSError,subprocess.TimeoutExpired):pass
+                try:
+                    child.kill()
+                    child.wait(timeout=2)
+                except (OSError,subprocess.TimeoutExpired):
+                    pass
             self._lyrics_prepare_state={'state':'timeout','model':model,
                                         'message':'模型下载超过时限，请稍后重试'}
         except (OSError,RuntimeError,ValueError,AttributeError) as exc:
@@ -9505,7 +9698,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
               or bool(preparing and preparing.is_alive()))
         model=cfg.get('lyrics_model','base')
         device=cfg.get('lyrics_device','cpu')
-        if device=='auto':device='cuda'
+        if device=='auto':
+            device='cuda'
         # Acquire before creating the thread so a rapid double-click cannot
         # start two concurrent GPU model probes.
         if not self._lyrics_diagnostic_lock.acquire(blocking=False):
@@ -9561,7 +9755,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
                     self._analysis_children.discard(proc)
         except subprocess.TimeoutExpired:
             try:
-                proc.kill();proc.communicate(timeout=2)
+                proc.kill()
+                proc.communicate(timeout=2)
             except (OSError,subprocess.TimeoutExpired):
                 pass
             self._lyrics_diagnostic_state={'state':'timeout',
@@ -10030,6 +10225,7 @@ class MusicPerceptionPlugin(NekoPluginBase):
 
         def work():
             import wave
+
             import numpy as np
             title_marks = []
             last_title = None

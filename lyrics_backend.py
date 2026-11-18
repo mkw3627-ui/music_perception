@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .lyrics_model_store import find_local_model, LyricsModelDownloadError
+from .lyrics_model_store import LyricsModelDownloadError, find_local_model
 
 SUPPORTED_LANGUAGES = {'zh', 'ja', 'en'}
 LANGUAGE_MODES = {'auto', 'zh', 'ja', 'en'}
@@ -30,7 +30,8 @@ def _make_model(model_name: str, root: Path, model_factory=None,
         raise ValueError('Unknown lyrics device policy')
     if not isinstance(cpu_threads,int) or not 1 <= cpu_threads <= 4:
         raise ValueError('Lyrics CPU threads out of range')
-    if stage_hook: stage_hook('checking_model')
+    if stage_hook:
+        stage_hook('checking_model')
     if model_factory is None:
         # v0.8.4: NEVER perform network I/O in a live lyrics worker. In the
         # previous build a clip could sit at `checking_model` for minutes
@@ -51,20 +52,24 @@ def _make_model(model_name: str, root: Path, model_factory=None,
     root.mkdir(parents=True, exist_ok=True)
     cpu_options = dict(device='cpu', compute_type='int8', cpu_threads=cpu_threads,
                        num_workers=1, download_root=str(root))
-    if stage_hook: stage_hook('model_ready')
+    if stage_hook:
+        stage_hook('model_ready')
     if device_policy in {'cuda', 'auto'}:
         try:
-            if stage_hook: stage_hook('loading_cuda')
+            if stage_hook:
+                stage_hook('loading_cuda')
             return model_factory(model_path, device='cuda', compute_type='float16',
                                  num_workers=1, download_root=str(root),
                                  local_files_only=True), 'cuda'
         except (RuntimeError, OSError, ValueError, ImportError) as exc:
-            if stage_hook: stage_hook('gpu_fallback')
+            if stage_hook:
+                stage_hook('gpu_fallback')
             if diagnostics is not None:
                 diagnostics['gpu_warning'] = (
                     'CUDA 歌词加速初始化失败（' + type(exc).__name__ + '）；已回退 CPU INT8。'
                     '请检查 NVIDIA 显卡驱动、CUDA 12 和 cuDNN 9。')
-    if stage_hook: stage_hook('loading_cpu')
+    if stage_hook:
+        stage_hook('loading_cpu')
     return model_factory(model_path, local_files_only=True, **cpu_options), 'cpu'
 
 
@@ -90,7 +95,8 @@ def prepare_singing_model(*, model_dir, model_name, model_cache,
         model = model_cache['instance']
         device = model_cache['device']
         details = model_cache.get('diagnostics') or {}
-        if stage_hook: stage_hook('model_reused')
+        if stage_hook:
+            stage_hook('model_reused')
     else:
         details = {}
         model, device = _make_model(model_name, Path(model_dir),
@@ -101,7 +107,8 @@ def prepare_singing_model(*, model_dir, model_name, model_cache,
     # CUDA may load successfully but crash at first inference because cuDNN
     # is unavailable. A tiny synthetic silence check catches this before
     # retiring the old lyrics worker; no system audio enters this preflight.
-    if stage_hook: stage_hook('preflight')
+    if stage_hook:
+        stage_hook('preflight')
     try:
         result, _ = model.transcribe(np.zeros(16000, dtype=np.float32),
                                      task='transcribe', language='en',
@@ -147,7 +154,8 @@ def transcribe_singing_candidate(pcm, *, model_dir: str | Path, model_name: str 
     if model_cache is not None and model_cache.get('key') == key and model_cache.get('instance') is not None:
         model, device = model_cache['instance'], model_cache['device']
         gpu_diagnostics.update(model_cache.get('diagnostics') or {})
-        if stage_hook: stage_hook('model_reused')
+        if stage_hook:
+            stage_hook('model_reused')
     else:
         model, device = _make_model(model_name, Path(model_dir), model_factory,
                                     device_policy=device_policy, cpu_threads=cpu_threads,
@@ -177,7 +185,8 @@ def transcribe_singing_candidate(pcm, *, model_dir: str | Path, model_name: str 
         # Inference only starts when the iterator is consumed.
         return list(pieces), info
 
-    if stage_hook: stage_hook('decoding')
+    if stage_hook:
+        stage_hook('decoding')
     try:
         segments, info = decode(model)
     except (RuntimeError, OSError, ValueError):
@@ -192,7 +201,8 @@ def transcribe_singing_candidate(pcm, *, model_dir: str | Path, model_name: str 
                         cpu_threads=cpu_threads, num_workers=1,
                         download_root=str(model_dir), local_files_only=True)
         device = 'cpu'
-        if stage_hook: stage_hook('gpu_fallback')
+        if stage_hook:
+            stage_hook('gpu_fallback')
         gpu_diagnostics['gpu_warning'] = (
             'CUDA 首次推理失败；已回退 CPU INT8。请核对 NVIDIA 显卡驱动和 CUDA/cuDNN。')
         # Persist CPU fallback for subsequent clips; do not retry broken GPU.

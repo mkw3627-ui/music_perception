@@ -1,9 +1,10 @@
 """Windows side-by-side vendor acceptance tests; no network or Windows host needed."""
 from __future__ import annotations
 
-from pathlib import Path
 import importlib.util
 import json
+from pathlib import Path
+
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -139,7 +140,8 @@ def test_install_uses_copy_mode_to_avoid_windows_cross_volume_hardlinks(monkeypa
         returncode = 0
         def __init__(self, argv, **kwargs):
             seen['env'] = kwargs['env']
-        def poll(self):return 0
+        def poll(self):
+            return 0
     monkeypatch.setattr(module.subprocess, 'Popen', Child)
     code, _ = env._attempt_install(['uv', 'pip', 'install'], deadline=module.time.monotonic() + 5)
     assert code == 0

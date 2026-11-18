@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import argparse
 import ast
-from pathlib import Path
 import sys
+from pathlib import Path
 
 try:  # Python 3.11+
     import tomllib
@@ -194,7 +194,8 @@ def compare_entries(source: Path) -> tuple[list[str], list[str]]:
     meta = source / 'plugin.meta.json'
     if meta.is_file():
         try:
-            import hashlib, json
+            import hashlib
+            import json
             data = json.loads(meta.read_text(encoding='utf-8'))
             want = str(data.get('source_sha256') or '')
             got = hashlib.sha256(init_py.read_bytes()).hexdigest()

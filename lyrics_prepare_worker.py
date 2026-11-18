@@ -4,16 +4,16 @@ Run under the managed CPython -I -S and isolated vendor.  No N.E.K.O SDK,
 no audio processing and no authentication secrets in the status file.
 """
 from __future__ import annotations
+
+import inspect
 import json
-from pathlib import Path
+import os
 import sys
+import threading
 import time
 import types
-import threading
-import inspect
-import os
 import uuid
-
+from pathlib import Path
 
 _report_lock = threading.Lock()
 
@@ -31,10 +31,14 @@ def report(path: Path, model: str, stage: str, state: str, note: str = '', *,
               'stage': stage, 'state': state, 'updated_at': int(time.time())}
     if note:
         record['message'] = note[:350]
-    if source_name: record['source_name'] = source_name[:60]
-    if source: record['source'] = source[:70]
-    if filename: record['filename'] = filename[:80]
-    if phase: record['phase'] = phase[:40]
+    if source_name:
+        record['source_name'] = source_name[:60]
+    if source:
+        record['source'] = source[:70]
+    if filename:
+        record['filename'] = filename[:80]
+    if phase:
+        record['phase'] = phase[:40]
     if weight_bytes is not None and weight_mtime_ns is not None:
         record['weight_bytes'] = int(weight_bytes)
         record['weight_mtime_ns'] = int(weight_mtime_ns)
@@ -45,11 +49,16 @@ def report(path: Path, model: str, stage: str, state: str, note: str = '', *,
     if estimated_total is not None:
         record['expected_bytes_estimate'] = max(0, int(estimated_total))
         record['progress_estimated'] = (state != 'ready')
-    if speed_bytes_s is not None: record['speed_bytes_s'] = max(0,float(speed_bytes_s))
-    if eta_seconds is not None: record['eta_seconds'] = max(0,float(eta_seconds))
-    if total_bytes is not None: record['total_bytes'] = max(0,int(total_bytes))
-    if stalled is not None: record['stalled'] = bool(stalled)
-    if last_progress_at is not None: record['last_progress_at'] = float(last_progress_at)
+    if speed_bytes_s is not None:
+        record['speed_bytes_s'] = max(0,float(speed_bytes_s))
+    if eta_seconds is not None:
+        record['eta_seconds'] = max(0,float(eta_seconds))
+    if total_bytes is not None:
+        record['total_bytes'] = max(0,int(total_bytes))
+    if stalled is not None:
+        record['stalled'] = bool(stalled)
+    if last_progress_at is not None:
+        record['last_progress_at'] = float(last_progress_at)
     if progress_pct is not None:
         record['progress_pct'] = max(0, min(100, int(progress_pct)))
     if verification_pct is not None:
@@ -68,8 +77,10 @@ def report(path: Path, model: str, stage: str, state: str, note: str = '', *,
             except OSError:
                 time.sleep(0.05*(attempt+1))
             finally:
-                try:tmp.unlink(missing_ok=True)
-                except OSError:pass
+                try:
+                    tmp.unlink(missing_ok=True)
+                except OSError:
+                    pass
     return record
 
 
@@ -94,8 +105,11 @@ def main() -> int:
     transfer_lock = threading.Lock()
     try:
         from music_perception.lyrics_model_store import (
-            ensure_local_model, observed_download_bytes, EXPECTED_DOWNLOAD_BYTES,
-            sidecar_stat_signature)
+            EXPECTED_DOWNLOAD_BYTES,
+            ensure_local_model,
+            observed_download_bytes,
+            sidecar_stat_signature,
+        )
         total = EXPECTED_DOWNLOAD_BYTES[model]
         report(target, model, 'checking_existing', 'running',
                '正在核对已有权重；未确认完整之前不能启用模型',
@@ -147,8 +161,10 @@ def main() -> int:
                 current = (received, pct)
                 if current != last:
                     with transfer_lock:
-                        phase=transfer['phase']; source=transfer['source']
-                        source_name=transfer['source_name']; filename=transfer['filename']
+                        phase=transfer['phase']
+                        source=transfer['source']
+                        source_name=transfer['source_name']
+                        filename=transfer['filename']
                         streaming=transfer.get('streaming',False)
                     if phase == 'verifying_sha' or streaming:
                         # SHA owns its progress; direct HTTPS owns real bytes
