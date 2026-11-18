@@ -138,8 +138,10 @@ def test_fallback_to_pip_when_uv_is_missing(tmp_path, monkeypatch):
     monkeypatch.setattr(builder, "_run_command", fake_command)
     result = builder.prepare(source)
     assert result["ready"] is True
-    assert calls[0][:3] == [sys.executable, "-m", "pip"]
-    assert calls[1][:2] == [sys.executable, "-c"]
+    # 解析器返回 resolve() 后的真实解释器；Linux venv 的 python 是符号链接。
+    real = str(Path(sys.executable).resolve())
+    assert calls[0][:3] == [real, "-m", "pip"]
+    assert calls[1][:2] == [real, "-c"]
     assert (source / "vendor/pip_fallback.txt").exists()
 
 
