@@ -1047,6 +1047,13 @@
     // 而身体 ±10° 写 5~7° 已经是 60~70%。所以头部按参数自身范围的比例驱动，
     // 换模型/换皮也能保持同样的可见幅度。
     var setFraction = function (id, fraction, weight) {
+      // 第六十九轮：适配层量过这个模型（以水水为一倍、按五官实测）时，按校准后的值写，
+      // 换模型后脸转 / 点 / 歪的幅度和水水一样；没量过的照旧按区间比例。
+      if (prof && PA && PA.rawOf && STD2CH[id]) {
+        var rw = PA.rawOf(coreModel, STD2CH[id], clamp(fraction * weight, -1, 1));
+        var mm = prof.map[STD2CH[id]];
+        if (rw && mm && mm.calStd) { write(rw[0], rw[1]); return; }
+      }
       id = resolve(id);
       if (!id) return;
       var idx = -1;

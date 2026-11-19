@@ -337,6 +337,24 @@
     } catch (e) { return 0; }
   }
 
+  /**
+   * 归一化量 → [真实参数 ID, 写入值]，不写。校准过的通道走实测增益（按水水对齐），
+   * 没校准的按区间换算。律动引擎要自己做平滑 / 限速再写，用这个拿目标值。
+   */
+  function rawOf(core, ch, v) {
+    var p = profile(core);
+    if (p) refreshCal(p);
+    var m = p && p.map[ch];
+    if (!m || !isFinite(v)) return null;
+    try {
+      if (m.calStd && p.cal) {
+        var r = calibrator().resolve(p.cal, m.calStd, clamp(v, -1, 1) * calHalf(m));
+        return r ? [r[0], r[1]] : null;
+      }
+      return [m.id, toRaw(m, v)];
+    } catch (e) { return null; }
+  }
+
   /** 叠加写：dv 是归一化增量，叠到模型当前值上（结果钳在区间内）。 */
   function add(core, ch, dv) {
     var p = profile(core);
@@ -426,7 +444,7 @@
     CHANNELS: CHANNELS,
     profile: profile, attachInfo: attachInfo,
     set: set, add: add, get: get, reset: reset, addRef: addRef, setRef: setRef, refHalf: refHalf,
-    toRaw: toRaw, toRawDelta: toRawDelta, toNorm: toNorm,
+    toRaw: toRaw, toRawDelta: toRawDelta, toNorm: toNorm, rawOf: rawOf,
     expressionFor: expressionFor, describe: describe,
     last: function () { return lastProfile; },
     calibrated: function (core) { var p = profile(core); if (p) refreshCal(p); return !!(p && p.calibrated); },

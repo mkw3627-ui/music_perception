@@ -116,6 +116,94 @@
   const CACHE = typeof WeakMap === 'function' ? new WeakMap() : null;
   const LOG = [];
 
+  // ---- 五官尺子（第六十九轮）----
+  // 角度通道按「脸」量：x = 五官中心横移、y = 纵移（眼距 %）、rot = 五官连线转了几度。
+  const FACE_AXIS = {
+    ParamAngleX: 'x', ParamAngleY: 'y', ParamAngleZ: 'rot',
+    ParamBodyAngleX: 'x', ParamBodyAngleY: 'y', ParamBodyAngleZ: 'rot',
+  };
+  // 水水在 PROBE 典型量下的五官读数（正 / 反向，眼距 % 或度）。_tools/l2d_adapt/groove_bench.js 同一把尺子实测。
+  // 水水身体左右转（BodyAngleX）脸不跟着动（读数 0），这一条没有刻度，保持原来的量法。
+  const FACE_CURVE = { ParamAngleX: 1, ParamAngleY: 1, ParamAngleZ: 1 };
+  // 水水的五官曲线：标准值 |v|（0..30）→ 五官读数，正 / 反向各一条。face_probe.js 实测。
+  // 水水这三条几乎是直线（误差 < 1%），所以只记 ±30 时的读数，按直线展开。
+  const FACE_REF_END = { ParamAngleX: [28.171, 30.93], ParamAngleY: [13.938, 27.858], ParamAngleZ: [16.676, 16.946] };
+  const lineCurve = end => ({ xs: [0, 30], ys: [0, end] });
+  let FACE_REF_CURVE = {};
+  for (const k in FACE_REF_END) FACE_REF_CURVE[k] = { pos: lineCurve(FACE_REF_END[k][0]), neg: lineCurve(FACE_REF_END[k][1]) };
+  let FACE_REF = {
+    ParamAngleX: [11.213, 12.368], ParamAngleY: [4.620, 9.279], ParamAngleZ: [4.814, 4.754],
+    ParamBodyAngleY: [9.304, 42.249], ParamBodyAngleZ: [1.558, 1.625],
+  };
+  function boxOf(v) {
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+    for (let j = 0; j < v.length; j += 2) {
+      if (v[j] < x0) x0 = v[j]; if (v[j] > x1) x1 = v[j];
+      if (v[j + 1] < y0) y0 = v[j + 1]; if (v[j + 1] > y1) y1 = v[j + 1];
+    }
+    return [x0, x1, y0, y1];
+  }
+  function maxMove(a, b) { let d = 0; for (let j = 0; j < a.length; j++) { const x = Math.abs(a[j] - b[j]); if (x > d) d = x; } return d; }
+  function findFace(native, P, D, ids, amps, chosen, reset, grab) {
+    try {
+      reset();
+      const rest = grab();
+      const shot = (i, v) => { reset(); P.values[i] = v; return grab(); };
+      // 眼珠：眼球 X 推满时动得最多的那几块，左右各取一块
+      const eb = chosen.ParamEyeBallX && amps[chosen.ParamEyeBallX];
+      if (!eb) return null;
+      const se = shot(eb.i, eb.hi);
+      const d = rest.map((b, i) => maxMove(se[i], b));
+      const mx = Math.max(...d);
+      if (!(mx > 0)) return null;
+      const eyes = d.map((x, i) => (x >= mx * 0.5 ? i : -1)).filter(i => i >= 0);
+      const cx = i => { const b = boxOf(rest[i]); return (b[0] + b[1]) / 2; };
+      const xs = eyes.map(cx).sort((p, q) => p - q);
+      const mid = (xs[0] + xs[xs.length - 1]) / 2;
+      let li = -1, ri = -1;
+      for (const i of eyes) { if (cx(i) < mid) { if (li < 0 || d[i] > d[li]) li = i; } else if (ri < 0 || d[i] > d[ri]) ri = i; }
+      if (li < 0 || ri < 0) return null;
+      let eyeW = Math.abs(cx(ri) - cx(li));
+      // 头宽：歪头推满时会动的网格的横向跨度；眼距不到头宽 6% 说明眼球参数只带高光，退回头宽 × 0.4
+      const az = chosen.ParamAngleZ && amps[chosen.ParamAngleZ];
+      if (az) {
+        const sz = shot(az.i, az.hi);
+        let x0 = 1e9, x1 = -1e9;
+        for (let i = 0; i < D.count; i++) if (maxMove(sz[i], rest[i]) > 1e-4) { const b = boxOf(rest[i]); x0 = Math.min(x0, b[0]); x1 = Math.max(x1, b[1]); }
+        const headW = x1 > x0 ? x1 - x0 : 0;
+        if (headW > 0 && !(eyeW > headW * 0.06)) eyeW = headW * 0.4;
+      }
+      if (!(eyeW > 0)) return null;
+      const face = [li, ri];
+      // 嘴：张嘴推满时高度增加最多、看得见、静止时不大的那一块
+      const mo = chosen.ParamMouthOpenY && amps[chosen.ParamMouthOpenY];
+      if (mo) {
+        const sm = shot(mo.i, mo.hi);
+        let best = 0, mi = -1;
+        for (let i = 0; i < D.count; i++) {
+          const b0 = boxOf(rest[i]), b1 = boxOf(sm[i]);
+          const h0 = b0[3] - b0[2], dh = (b1[3] - b1[2]) - h0;
+          if (sm.op[i] < 0.5 || h0 > eyeW * 0.6) continue;
+          if (dh > best) { best = dh; mi = i; }
+        }
+        if (mi >= 0) face.push(mi);
+      }
+      const cen = s => { let x = 0, y = 0, n = 0; for (const i of face) { const v = s[i]; for (let j = 0; j < v.length; j += 2) { x += v[j]; y += v[j + 1]; n++; } } return [x / n, y / n]; };
+      // 转角只看两颗眼珠的连线（嘴张合会让三点形状变，干扰旋转）
+      const eyeAng = s => { const a = boxOf(s[li]), b = boxOf(s[ri]); return Math.atan2((b[2] + b[3]) / 2 - (a[2] + a[3]) / 2, (b[0] + b[1]) / 2 - (a[0] + a[1]) / 2) * 180 / Math.PI; };
+      const c0 = cen(rest), a0 = eyeAng(rest);
+      return {
+        info: { eyes: [li, ri], mouth: face[2] === undefined ? -1 : face[2], eyeW },
+        read(i, v, axis) {
+          const s = shot(i, v);
+          if (axis === 'rot') { let r = eyeAng(s) - a0; if (r > 180) r -= 360; if (r < -180) r += 360; return Math.abs(r); }
+          const c = cen(s);
+          return Math.abs((axis === 'x' ? c[0] - c0[0] : c[1] - c0[1]) / eyeW * 100);
+        },
+      };
+    } catch (e) { return null; }
+  }
+
   function at(v, i) { return (v && typeof v.at === 'function') ? v.at(i) : v[i]; }
   function size(v) { return v ? (typeof v.getSize === 'function' ? v.getSize() : v.length) : 0; }
 
@@ -181,6 +269,10 @@
       }
       const chosen = pick(amps);
       const probes = {};
+      // 第六十九轮：头 / 身体的角度通道改按「五官」量（两颗眼珠 + 嘴的网格中心，单位 = 眼距 %）。
+      // 原来量的是「全身最大位移 / 包围盒」，头发、耳朵、饰品一被带动就把转头量大（梦梦、白毛宝宝律动转头 1.7~2.5 倍），
+      // 观众看的是脸往哪转多少，所以只量脸。找不到五官的模型退回原来的量法。
+      const face = findFace(native, P, D, ids, amps, chosen, reset, grab);
       for (const std in chosen) {
         const id = chosen[std];
         const p = id && amps[id];
@@ -193,12 +285,22 @@
           neg: std === 'ParamMouthOpenY' ? 0 : disp(p.i, Math.max(p.lo, p.def - step)),
           scale: id === std ? 1 : half / stdHalf,
         };
+        if (face && FACE_AXIS[std]) {
+          probes[std].fpos = face.read(p.i, Math.min(p.hi, p.def + step), FACE_AXIS[std]);
+          probes[std].fneg = face.read(p.i, Math.max(p.lo, p.def - step), FACE_AXIS[std]);
+          // 头的三个角度再量整条曲线（默认值往两头各 12 段）：很多模型的绑定不是直线
+          // （AngleY 只在 ±10 以内有形变、过了就不动），单个增益在大动作上对不上。
+          if (FACE_CURVE[std]) {
+            const side = end => { const xs = [], ys = []; for (let k = 0; k <= 12; k++) { const v = p.def + (end - p.def) * k / 12; xs.push(Math.abs(v - p.def)); ys.push(k ? face.read(p.i, v, FACE_AXIS[std]) : 0); } return { xs, ys: monotone(ys) }; };
+            probes[std].fc = { pos: side(p.hi), neg: side(p.lo) };
+          }
+        }
         if (std === 'ParamMouthOpenY') {
           // 张嘴曲线：在本参数自己的区间上取 11 个点
           probes[std].curve = MOUTH_STEPS.map(s => disp(p.i, p.lo + (p.hi - p.lo) * s));
         }
       }
-      return { amps, chosen, probes };
+      return { amps, chosen, probes, face: face ? face.info : null };
     } finally {
       for (let i = 0; i < P.count; i++) P.values[i] = saved[i];
       try { native.update(); } catch (e) { /* 还原失败也不影响下一帧 */ }
@@ -301,12 +403,27 @@
       const p = m.amps[id], pr = m.probes[std];
       const [rp, rn] = REF[std];
       // 某个方向在本模型上不动（只做了单边形变），就沿用另一边的增益
-      const gp = pr.pos > 1e-3 ? rp / pr.pos : (pr.neg > 1e-3 ? rn / pr.neg : 1);
-      const gn = pr.neg > 1e-3 ? rn / pr.neg : gp;
+      let gp = pr.pos > 1e-3 ? rp / pr.pos : (pr.neg > 1e-3 ? rn / pr.neg : 1);
+      let gn = pr.neg > 1e-3 ? rn / pr.neg : gp;
+      // 角度通道：有五官读数、也有水水的五官刻度时，按脸算增益（替换上面按全身最大位移算的）
+      const fr = FACE_REF && FACE_REF[std];
+      if (fr && m.face && pr.fpos !== undefined) {
+        const FD = 0.05;
+        if ((pr.fpos > FD && fr[0] > FD) || (pr.fneg > FD && fr[1] > FD)) {
+          gp = pr.fpos > FD && fr[0] > FD ? fr[0] / pr.fpos : fr[1] / pr.fneg;
+          gn = pr.fneg > FD && fr[1] > FD ? fr[1] / pr.fneg : gp;
+          why[std] = (why[std] || 'std') + '+face';
+        }
+      }
       prof.map[std] = { id, why: why[std], lo: p.lo, hi: p.hi, def: p.def, scale: pr.scale,
         gainPos: clampG(gp), gainNeg: std === 'ParamMouthOpenY' ? clampG(gp) : clampG(gn) };
       if (pr.curve) prof.map[std].curve = monotone(pr.curve);
+      if (pr.fc && FACE_REF_CURVE && FACE_REF_CURVE[std]) prof.map[std].fc = pr.fc;
     }
+    prof.face = m.face;
+    prof.faceProbe = {}; prof.faceCurve = {};
+    for (const std in FACE_CURVE) if (m.probes[std] && m.probes[std].fc) prof.faceCurve[std] = m.probes[std].fc;
+    for (const std in FACE_AXIS) if (m.probes[std] && m.probes[std].fpos !== undefined) prof.faceProbe[std] = [+m.probes[std].fpos.toFixed(4), +m.probes[std].fneg.toFixed(4)];
     prof.fx = resolveFx(m.amps, names);
     prof.fxIds = {};
     for (const k in prof.fx) prof.fxIds[k] = prof.fx[k] ? prof.fx[k].id : null;
@@ -345,6 +462,18 @@
     return 1;
   }
 
+  function lerp(xs, ys, x) {
+    if (x <= xs[0]) return ys[0];
+    for (let k = 0; k < xs.length - 1; k++) if (x <= xs[k + 1]) { const t = (x - xs[k]) / ((xs[k + 1] - xs[k]) || 1); return ys[k] + (ys[k + 1] - ys[k]) * t; }
+    return ys[ys.length - 1];
+  }
+  // ys 单调不减：找 x 使 ys(x) = y；超过最大值取最后一个 x
+  function invMono(xs, ys, y) {
+    if (y <= ys[0]) return xs[0];
+    for (let k = 0; k < ys.length - 1; k++) if (y <= ys[k + 1]) { const sp = ys[k + 1] - ys[k]; return xs[k] + (xs[k + 1] - xs[k]) * (sp > 1e-9 ? (y - ys[k]) / sp : 0); }
+    return xs[xs.length - 1];
+  }
+
   // 标准单位 → 本模型真实参数和值。std 是我们一直在写的标准参数名，v 是标准单位下的值（以 0 为中立）。
   // 返回 [真实参数 ID, 真实值]；这个通道在本模型上做不出来时返回 null（调用方跳过）。
   function resolve(prof, std, v) {
@@ -356,6 +485,16 @@
       // 张嘴：参考模型在 v 时张多开 → 本模型写多少才一样开
       const x = curveInv(m.curve, curveAt(REF_MOUTH, Math.min(1, Math.max(0, v))));
       return [m.id, m.lo + (m.hi - m.lo) * x];
+    }
+    if (m.fc) {
+      // 头的角度：水水在 |v| 时脸动多少 → 本模型同方向要写多少才动一样多（够不到就停在区间端点）
+      const sd = v >= 0 ? 'pos' : 'neg', rc = FACE_REF_CURVE[std][sd], mc = m.fc[sd];
+      const want = lerp(rc.xs, rc.ys, Math.abs(v));
+      const off = invMono(mc.xs, mc.ys, want);
+      let out = m.def + (v >= 0 ? off : -off);
+      if (out < m.lo) out = m.lo;
+      if (out > m.hi) out = m.hi;
+      return [m.id, out];
     }
     const off = v * (v >= 0 ? m.gainPos : m.gainNeg) * m.scale;
     let out = m.def + off;
@@ -391,6 +530,11 @@
       return curveInv(REF_MOUTH, curveAt(m.curve, Math.min(1, Math.max(0, x))));
     }
     const off = real - m.def;
+    if (m.fc) {
+      const sd = off >= 0 ? 'pos' : 'neg', rc = FACE_REF_CURVE[std][sd], mc = m.fc[sd];
+      const sv = invMono(rc.xs, rc.ys, lerp(mc.xs, mc.ys, Math.abs(off)));
+      return off >= 0 ? sv : -sv;
+    }
     const g = (off >= 0 ? m.gainPos : m.gainNeg) * m.scale;
     return g ? off / g : 0;
   }
@@ -506,5 +650,6 @@
     return core;
   }
 
-  return { REF, PROBE, calibrate, profileOf, resolve, resolveDelta, toStd, write, idOf, wrapCore, adapted, log: LOG };
+  function setFaceRef(r, c) { if (r) FACE_REF = r; if (c) FACE_REF_CURVE = c; }
+  return { REF, PROBE, FACE_AXIS, setFaceRef, calibrate, profileOf, resolve, resolveDelta, toStd, write, idOf, wrapCore, adapted, log: LOG };
 });
