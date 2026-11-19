@@ -5,7 +5,7 @@ description = "电脑音频感知中控：视频语音沿用 Whisper；专业歌
 short_description = "视频语音与专业歌声分离识别；应用声道及私有 AI 感知"
 keywords = ["音乐", "歌词", "歌声", "视频语音", "中日英", "Whisper", "Qwen3-ASR", "节拍", "BPM", "music", "speech"]
 # Historical manifest was version = "0.9.0"; version 跟随 pyproject [project].version。
-version = "0.9.22"
+version = "0.9.23"
 type = "plugin"
 entry = "plugin.plugins.music_perception:MusicPerceptionPlugin"
 

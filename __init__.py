@@ -1538,7 +1538,7 @@ class MusicPerceptionPlugin(NekoPluginBase):
             data = tomllib.loads((Path(__file__).resolve().parent / 'pyproject.toml').read_text(encoding='utf-8'))
             return str(data['project']['version'])
         except Exception:  # noqa: BLE001 - 读不到时给一个稳定占位，不崩状态接口
-            return '0.9.22'
+            return '0.9.23'
 
     async def _prepare_runtime_environment(self, *, defer: bool = False):
         try:
