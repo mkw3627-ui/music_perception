@@ -153,15 +153,40 @@ _CLIENT = {"at": 0.0, "version": None, "model": 0, "applied": 0, "groove": 0,
            "lips": 0, "lseq": 0, "lport": 0, "lcues": 0, "lw": 0, "lown": 0}
 
 
+# 主窗口页面上报的「用户/AI 在不在说话」与屏幕分享帧（吐槽用）。只收 127.0.0.1 的主窗口桥。
+_PAGE = {"at": 0.0, "user_input_at": 0.0, "ai_speaking": False, "screen_share": False,
+         "frame_at": 0.0, "frame": b"", "frame_mime": "image/jpeg", "lanlan": ""}
+FRAME_MAX_BYTES = 1_500_000
+
+
+def page_signals() -> dict:
+    """吐槽用：主窗口最近一次上报（不含帧本身）。"""
+    with _LOCK:
+        return {k: v for k, v in _PAGE.items() if k != "frame"}
+
+
+def latest_screen_frame(max_age_s: float = 20.0, newer_than: float = 0.0):
+    """屏幕分享最近一帧 (bytes, mime)；太旧、早于 newer_than 或没有时返回 None。"""
+    with _LOCK:
+        if (_PAGE["frame"] and time.time() - _PAGE["frame_at"] <= max_age_s
+                and _PAGE["frame_at"] >= newer_than):
+            return _PAGE["frame"], _PAGE["frame_mime"]
+    return None
+
+
 class _BridgeHandler(BaseHTTPRequestHandler):
     state_provider = None
     root: Path = Path(".")
+    # 吐槽：桥问「现在要不要截一帧」（只有吐槽开着且屏幕分享在跑时才要）
+    frame_wanted = None
 
     def _send(self, code, body: bytes, ctype: str):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Cache-Control", "no-store")
         self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -207,11 +232,69 @@ class _BridgeHandler(BaseHTTPRequestHandler):
             return
         self._send(404, b"not found", "text/plain; charset=utf-8")
 
+    def do_OPTIONS(self):  # noqa: N802 - CORS 预检（主窗口页面 POST 帧用）
+        self._send(204, b"", "text/plain; charset=utf-8")
+
+    def do_POST(self):  # noqa: N802 - stdlib handler API
+        path = urlsplit(self.path).path
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = 0
+        if length <= 0 or length > FRAME_MAX_BYTES * 2:
+            self._send(413, b"{\"ok\": false}", "application/json; charset=utf-8")
+            return
+        try:
+            data = json.loads(self.rfile.read(length).decode("utf-8"))
+        except (ValueError, UnicodeError):
+            self._send(400, b"{\"ok\": false}", "application/json; charset=utf-8")
+            return
+        if path == "/page_signals" and isinstance(data, dict):
+            with _LOCK:
+                _PAGE.update({"at": time.time(),
+                              "user_input_at": float(data.get("user_input_at") or 0) / 1000.0,
+                              "ai_speaking": bool(data.get("ai_speaking")),
+                              "screen_share": bool(data.get("screen_share")),
+                              "lanlan": str(data.get("lanlan") or "")[:40]})
+            answer = {"ok": True, "want_frame": False}
+            if self.frame_wanted:
+                try:
+                    extra = self.frame_wanted()
+                    if isinstance(extra, dict):
+                        answer.update(extra)
+                    else:
+                        answer["want_frame"] = bool(extra)
+                except Exception:  # noqa: BLE001 - 插件回调异常不影响页面
+                    pass
+            self._send(200, json.dumps(answer).encode("utf-8"), "application/json; charset=utf-8")
+            return
+        if path == "/screen_frame" and isinstance(data, dict):
+            import base64
+            url = str(data.get("data") or "")
+            head, _, b64 = url.partition(",")
+            if not head.startswith("data:image/") or ";base64" not in head:
+                self._send(400, b"{\"ok\": false}", "application/json; charset=utf-8")
+                return
+            try:
+                raw = base64.b64decode(b64, validate=True)
+            except (ValueError, TypeError):
+                self._send(400, b"{\"ok\": false}", "application/json; charset=utf-8")
+                return
+            if len(raw) > FRAME_MAX_BYTES:
+                self._send(413, b"{\"ok\": false}", "application/json; charset=utf-8")
+                return
+            with _LOCK:
+                _PAGE.update({"frame": raw, "frame_at": time.time(),
+                              "frame_mime": head[5:].split(";", 1)[0] or "image/jpeg"})
+            self._send(200, b"{\"ok\": true}", "application/json; charset=utf-8")
+            return
+        self._send(404, b"not found", "text/plain; charset=utf-8")
+
     def log_message(self, *_args):
         return
 
 
-def start_bridge_server(live2d_dir: Path, *, state_provider=None,
+def start_bridge_server(live2d_dir: Path, *, state_provider=None, frame_wanted=None,
                         port: int = BRIDGE_PORT) -> dict:
     live2d_dir = Path(live2d_dir).resolve()
     with _LOCK:
@@ -219,7 +302,8 @@ def start_bridge_server(live2d_dir: Path, *, state_provider=None,
         if info is not None and _BRIDGE.get("thread") and _BRIDGE["thread"].is_alive():
             return {"ok": True, "reused": True, "port": _BRIDGE["server"].server_address[1]}
         handler = type("BridgeHandler", (_BridgeHandler,), {
-            "state_provider": state_provider, "root": live2d_dir})
+            "state_provider": state_provider, "root": live2d_dir,
+            "frame_wanted": staticmethod(frame_wanted) if frame_wanted else None})
         try:
             httpd = socketserver.ThreadingTCPServer(("127.0.0.1", int(port)), handler)
         except OSError as exc:

@@ -69,6 +69,20 @@
       "parameters": []
     },
     {
+      "id": "set_commentary",
+      "name": "为她所听 · 吐槽开关",
+      "description": "开关音乐吐槽和视频吐槽；开启时暂停主程序定时主动搭话，关闭时恢复",
+      "ui_action": true,
+      "purpose": "owner_setting",
+      "permissions": "Owner switch; commentary is spoken by the character only while enabled.",
+      "data_level": "settings only",
+      "parameters": [
+        "music",
+        "video",
+        "frequency"
+      ]
+    },
+    {
       "id": "set_ai_delivery",
       "name": "允许AI静默读取所有已授权音频结果",
       "description": "单独用户授权；结构化音乐、视频语音与声道标签只供AI读取，不产生聊天消息；AI自行决定是否提及",

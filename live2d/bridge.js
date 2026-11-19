@@ -16,7 +16,7 @@
   'use strict';
   var BASE = 'http://127.0.0.1:48765';
   var STATIC = '/static/live2d/';
-  var VERSION = 82;
+  var VERSION = 83;
   // 一执行就上报：用来区分「页面没加载脚本」和「加载了但模块被拦」。
   try {
     fetch(BASE + '/hello?v=' + VERSION + '&stage=boot', { cache: 'no-store' }).catch(function () {});
@@ -3843,6 +3843,52 @@
       });
   }
 
+  // ---- 吐槽：告诉插件「主人在不在打字 / 她在不在说话 / 屏幕分享开没开」----
+  // 插件要一帧时（吐槽开着、该看一眼了）才从官方屏幕分享的流里截一张 JPEG 发过去；
+  // 不开屏幕分享就什么都不截。截图走官方自己的 captureFrameFromStream。
+  var pageSig = { busy: false };
+  function pageSignals() {
+    if (pageSig.busy) return;
+    var st = window.appState || {};
+    var stream = st.screenCaptureStream;
+    var sharing = !!(stream && stream.active);
+    var body = {
+      user_input_at: Number(window.lastUserInputTime || 0),
+      ai_speaking: !!(st.isPlaying || st.assistantSpeechActiveTurnId),
+      screen_share: sharing,
+      lanlan: (window.lanlan_config && window.lanlan_config.lanlan_name) || ''
+    };
+    pageSig.busy = true;
+    fetch(BASE + '/page_signals', { method: 'POST', cache: 'no-store',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json(); })
+      .then(function (ans) {
+        // 为她所听接管吐槽时，已打开的页面不会重读服务器设置——这里把官方定时搭话停掉；
+        // 接管结束（ans.official_paused=false）后不碰它，官方设置由插件写回、页面下次加载生效。
+        if (ans && ans.official_paused) {
+          try {
+            if (window.proactiveChatEnabled) window.proactiveChatEnabled = false;
+            if (typeof window.stopProactiveChatSchedule === 'function') window.stopProactiveChatSchedule();
+          } catch (e0) { /* 老版本主程序没有这个开关 */ }
+        } else if (ans && ans.official_restore && pageSig.restored !== ans.official_restore) {
+          // 插件刚恢复了官方设置：把恢复后的开关同步回页面，并重新排上官方定时搭话。
+          pageSig.restored = ans.official_restore;
+          try {
+            if (typeof ans.official_chat_enabled === 'boolean') window.proactiveChatEnabled = ans.official_chat_enabled;
+            if (window.proactiveChatEnabled && typeof window.scheduleProactiveChat === 'function') window.scheduleProactiveChat();
+          } catch (e1) { /* 忽略 */ }
+        }
+        if (!ans || !ans.want_frame || !sharing || typeof window.captureFrameFromStream !== 'function') return null;
+        return window.captureFrameFromStream(stream, 0.75, false).then(function (fr) {
+          if (!fr || !fr.dataUrl) return null;
+          return fetch(BASE + '/screen_frame', { method: 'POST', cache: 'no-store',
+            headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: fr.dataUrl }) });
+        });
+      })
+      .catch(function () { /* 插件没开就算了 */ })
+      .then(function () { pageSig.busy = false; });
+  }
+
   function start() {
     if (window.__nekoMusicGroove) return;
     window.__nekoMusicGroove = true;
@@ -3862,6 +3908,7 @@
     poll();
     setInterval(lipsPoll, 200);
     lipsPoll();
+    setInterval(pageSignals, 2000);
     requestAnimationFrame(tick);
   }
 

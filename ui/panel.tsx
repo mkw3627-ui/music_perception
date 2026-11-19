@@ -5,7 +5,7 @@ import {
 import type { PluginSurfaceProps } from "@neko/plugin-ui"
 import { Onboarding, qualities, singingOptions, stemChoices } from "./onboarding"
 
-const UI_PROTOCOL_BUILD = "0.9.22-suokong-gate-r1"
+const UI_PROTOCOL_BUILD = "0.9.24-commentary-r1"
 // N.E.K.O Hosted TSX; the same native UI kit used by 为她所控.
 // No external browser, CDN, React build or extra local web server.
 // Supersedes "0.9.0-audible-app-tags-r1". Backend compatibility interface
@@ -393,6 +393,7 @@ export default function WeiTaSuoTing(props:PluginSurfaceProps) {
   const env=status.environment || {}
   const live=status.live || {}
   const appCapture:any = status.app_capture || {}
+  const commentary:any = status.commentary || {}
   // Server meter monitor is fresher than the last manual scan. Never surface
   // process inventory as sound activity; only these peaks count as audible.
   const liveApps:any[] = Array.isArray(appCapture.audible_sources) &&
@@ -761,7 +762,28 @@ export default function WeiTaSuoTing(props:PluginSurfaceProps) {
         </>:null}
         </>}
       </Stack></Card>
-      <Text>识别出的文字、节拍和伴奏事件不会直接发送到聊天框；AI 自己决定是否使用与如何表达。</Text>
+      <Card title="吐槽"><Stack>
+        <Text>她会像坐在旁边一起听/看的朋友一样随口说一句：歌突然炸开、安静下来、变快变慢、换了一种风格时说说感觉；看视频时挑有意思的地方吐槽。不会报数字。</Text>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"12px"}}>
+          <div><Text>音乐吐槽</Text><Text>听到明显变化时说说感受</Text></div>
+          <Switch checked={Boolean(commentary.music_on)} disabled={Boolean(busy)}
+            onChange={(on:boolean)=>perform("set_commentary",{music:on},on?"音乐吐槽已开启":"音乐吐槽已关闭")}/>
+        </div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"12px"}}>
+          <div><Text>视频吐槽</Text><Text>{status.suokong_available?"用「为她所控」看当前视频窗口":
+            commentary.screen_share?"用主程序的屏幕分享画面":"需要「为她所控」，或在主程序里打开屏幕分享"}</Text></div>
+          <Switch checked={Boolean(commentary.video_on)} disabled={Boolean(busy)}
+            onChange={(on:boolean)=>perform("set_commentary",{video:on},on?"视频吐槽已开启":"视频吐槽已关闭")}/>
+        </div>
+        <SegmentedControl value={String(commentary.frequency||"lively")}
+          options={[{value:"lively",label:"活跃 · 约 1.5 分钟"},{value:"normal",label:"适中 · 约 4 分钟"},{value:"rare",label:"很少 · 约 10 分钟"}]}
+          onChange={(v:string)=>perform("set_commentary",{frequency:v},"吐槽频率已更新")}/>
+        {commentary.took_over_official?<Text>主程序的定时主动搭话已暂停，关掉吐槽后会恢复你原来的设置。</Text>:null}
+        {commentary.music_on||commentary.video_on?<Text>{commentary.last&&commentary.last.at?
+          "上一次："+(commentary.last.kind==="music"?"听歌 · ":commentary.last.kind==="screen"?"屏幕分享 · ":"看视频 · ")+short(commentary.last.what,"",40)
+          :"还没说过"}{commentary.why_not_now==="cooldown"?" · 冷却中":commentary.why_not_now==="user_active"?" · 你刚在聊天，先不打扰":""}</Text>:null}
+      </Stack></Card>
+      <Text>识别出的文字、节拍和伴奏事件不会直接发送到聊天框；AI 自己决定是否使用与如何表达。开启「吐槽」后，她会在明显变化时主动开口。</Text>
     </>:null}
 
     {tab==="source"?<>

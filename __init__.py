@@ -48,6 +48,8 @@ from .audio_dispatch import source_id as make_source_id
 from .audio_scene import classify_scene, normal_role
 from .auto_listener import FinishedClip, ListenerError, LiveListener
 from .cognitive_bridge_v1 import HearingCognitiveBridgeV1
+from .commentary import FREQUENCY_GAPS
+from .commentary_mixin import CommentaryMixin
 from .engine import EXTENSIONS, AudioAnalysisError, analyze_audio, brief_for_ai
 from .engine import analyze_waveform as analyze_waveform  # tests patch this module attribute
 from .glance import GLANCE_INTERVAL_S, GlanceScheduler
@@ -217,7 +219,7 @@ GLANCE_TIMEOUT_CEILING_S = 240.0
 # Optional installer/model preparation begins only after the lifecycle hook has returned.
 ENVIRONMENT_START_DELAY_SECONDS = 6.0
 # Legacy UI protocol superseded: 0.9.0-audible-app-tags-r1
-UI_PROTOCOL_BUILD = "0.9.22-suokong-gate-r1"
+UI_PROTOCOL_BUILD = "0.9.24-commentary-r1"
 
 ANALYZE_SCHEMA = {
     "type": "object",
@@ -238,7 +240,7 @@ SEGMENT_SCHEMA = {
 
 
 @neko_plugin
-class MusicPerceptionPlugin(NekoPluginBase):
+class MusicPerceptionPlugin(CommentaryMixin, NekoPluginBase):
     """Offline whole-song acoustics -> rhythm/spectrogram/melody hints/emotion cues."""
 
     @ui.context(id="dashboard")
@@ -557,13 +559,16 @@ class MusicPerceptionPlugin(NekoPluginBase):
         self._environment_task = asyncio.create_task(self._prepare_runtime_environment(defer=True))
         self._start_autostart_watchdog()
         self._start_glance_thread()
+        # 吐槽（音乐变化 / 视频画面）：开关、节奏和接管官方定时吐槽
+        self._commentary_init()
         self._start_vision_review_thread()
         self._start_track_title_thread()
         try:
             from .live2d_stage_server import start_bridge_server
             self._live2d_bridge = start_bridge_server(
                 Path(__file__).resolve().parent / 'live2d',
-                state_provider=self._live2d_state)
+                state_provider=self._live2d_state,
+                frame_wanted=self._commentary_frame_wanted)
         except Exception:  # noqa: BLE001 - 桥接失败不影响监听
             self._live2d_bridge = {'ok': False}
         self.logger.info("为她所听启动就绪；%.1f 秒后后台准备音频环境", ENVIRONMENT_START_DELAY_SECONDS)
@@ -1538,7 +1543,7 @@ class MusicPerceptionPlugin(NekoPluginBase):
             data = tomllib.loads((Path(__file__).resolve().parent / 'pyproject.toml').read_text(encoding='utf-8'))
             return str(data['project']['version'])
         except Exception:  # noqa: BLE001 - 读不到时给一个稳定占位，不崩状态接口
-            return '0.9.23'
+            return '0.9.24'
 
     async def _prepare_runtime_environment(self, *, defer: bool = False):
         try:
@@ -1594,6 +1599,10 @@ class MusicPerceptionPlugin(NekoPluginBase):
     @lifecycle(id="shutdown")
     async def shutdown(self, **_):
         self._shutdown_requested = True
+        try:
+            self._commentary_shutdown()
+        except Exception:  # noqa: BLE001 - 吐槽收尾失败不影响卸载
+            pass
         # 取消新手引导的后台安装器（B-7）。
         installer = getattr(self, '_onboarding_installer', None)
         if installer is not None:
@@ -5589,6 +5598,11 @@ class MusicPerceptionPlugin(NekoPluginBase):
                 }
                 self._live_timeline.append(entry)
                 self._live_timeline = self._live_timeline[-12:]
+                # 吐槽：和同一首歌的上一段比，有明显的「感觉变化」就让她随口说一句
+                try:
+                    self._commentary_on_clip(report)
+                except Exception:  # noqa: BLE001 - 吐槽绝不能影响识别
+                    self.logger.exception("音乐吐槽判断失败")
                 if self._song_current_id and self._active_track_sequence==clip.sequence:
                     timeline=context['musical_event_timeline']
                     self._song_memory.observe(
@@ -8094,6 +8108,49 @@ class MusicPerceptionPlugin(NekoPluginBase):
                    "stem_restored": bool(prev.get("stem_enabled")),
                    "note": "已恢复人声分离和歌词识别"})
 
+    def _commentary_status(self) -> dict:
+        state = getattr(self, '_commentary', None)
+        if state is None:
+            return {}
+        out = state.public()
+        out['why_not_now'] = state.why_not_now() if state.any_on else ''
+        try:
+            from .live2d_stage_server import page_signals
+            sig = page_signals()
+            out['screen_share'] = bool(sig.get('screen_share')) and time.time() - float(sig.get('at') or 0) < 10
+        except Exception:  # noqa: BLE001
+            out['screen_share'] = False
+        return out
+
+    @ui.action(id='set_commentary', label='吐槽开关', refresh_context=True)
+    @plugin_entry(id='set_commentary', name='为她所听 · 吐槽开关',
+                  description=('开关音乐吐槽（歌曲风格/音量/节奏变化时她会随口说一句）和视频吐槽'
+                               '（看「为她所控」的窗口画面，或主程序屏幕分享的画面）。开启时会暂停主程序的'
+                               '定时主动搭话，关闭时恢复主人原来的设置。'),
+                  input_schema={'type': 'object', 'properties': {
+                      'music': {'type': 'boolean'}, 'video': {'type': 'boolean'},
+                      'frequency': {'type': 'string', 'enum': ['lively', 'normal', 'rare']}}})
+    async def set_commentary(self, music=None, video=None, frequency=None, **_):
+        state = self._commentary
+        was_on = state.any_on
+        if isinstance(music, bool):
+            state.music_on = music
+        if isinstance(video, bool):
+            state.video_on = video
+        if frequency in FREQUENCY_GAPS:
+            state.frequency = frequency
+        state.save()
+        note = ''
+        if state.any_on and not was_on:
+            result = await self._commentary_takeover()
+            note = ('已暂停主程序的定时主动搭话，关闭吐槽后会恢复' if result.get('ok')
+                    else '主程序设置接口暂时不可用，定时主动搭话可能仍在运行')
+        elif was_on and not state.any_on:
+            result = await asyncio.to_thread(self._commentary_restore_sync)
+            note = '已恢复主程序原来的定时主动搭话设置' if result.get('ok') else '恢复主程序设置失败，请在主程序设置里检查'
+        self._commentary_owner_flag()
+        return Ok({'ok': True, 'commentary': self._commentary_status(), 'note': note})
+
     @ui.action(id="set_ai_delivery", label="允许 AI 感知", refresh_context=True)
     @plugin_entry(id="set_ai_delivery", name="允许AI静默读取所有已授权音频结果", description="单独用户授权；结构化音乐、视频语音与声道标签只供AI读取，不产生聊天消息；AI自行决定是否提及", input_schema={"type":"object", "properties":{"enabled":{"type":"boolean"}},"required":["enabled"]})
     async def set_ai_delivery(self, enabled: bool = False, **_):
@@ -8964,7 +9021,7 @@ class MusicPerceptionPlugin(NekoPluginBase):
     # 和 templates/index.html 里实际那一行保持一致；版本号走主程序的 static_asset_version，
     # 这样主程序更新时会自动失效缓存，也不会因为标记对不上被重复插入一次。
     _BRIDGE_TAG = ('<script src="/static/live2d/music-groove-bridge.js'
-                   '?v={{ static_asset_version }}-lips4-g81"></script>')
+                   '?v={{ static_asset_version }}-lips4-g83"></script>')
 
     def _app_bin_dir(self) -> Path | None:
         """Locate the running app's resources/bin (templates + static live there)."""
@@ -9065,7 +9122,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
         try:
             from .live2d_stage_server import start_bridge_server
             bridge = start_bridge_server(Path(__file__).resolve().parent / 'live2d',
-                                          state_provider=self._live2d_state)
+                                          state_provider=self._live2d_state,
+                                          frame_wanted=self._commentary_frame_wanted)
         except Exception as exc:  # noqa: BLE001
             bridge = {"ok": False, "error": str(exc)}
         return Ok({"ok": True, "app_bin": str(bin_dir), "script": str(target),
@@ -10151,7 +10209,8 @@ class MusicPerceptionPlugin(NekoPluginBase):
                     "video_watch_mode":getattr(self,'_video_watch_mode',DEFAULT_VIDEO_WATCH_MODE),
                     "video_suspect_cues":int((getattr(self,'_video_transcript',None) or {}).get('suspect_cues_count',0) or 0),
                     "video_context_ready":bool(getattr(self,'_video_transcript',None)),
-                    "suokong_available":await self._suokong_available()})
+                    "suokong_available":await self._suokong_available(),
+                    "commentary":self._commentary_status()})
 
 
     @plugin_entry(

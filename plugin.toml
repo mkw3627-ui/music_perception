@@ -5,7 +5,7 @@ description = "电脑音频感知中控：视频语音沿用 Whisper；专业歌
 short_description = "视频语音与专业歌声分离识别；应用声道及私有 AI 感知"
 keywords = ["音乐", "歌词", "歌声", "视频语音", "中日英", "Whisper", "Qwen3-ASR", "节拍", "BPM", "music", "speech"]
 # Historical manifest was version = "0.9.0"; version 跟随 pyproject [project].version。
-version = "0.9.23"
+version = "0.9.24"
 type = "plugin"
 entry = "plugin.plugins.music_perception:MusicPerceptionPlugin"
 
@@ -123,6 +123,12 @@ description = "独立进程验证GPU环境、DLL和模型；正在监听时只�
 input_schema = { type = "object", properties = {  } }
 
 [[plugin.entries]]
+id = "close_live2d_stage"
+name = "为她所听 · 关闭律动页"
+description = "关闭本地律动页服务"
+input_schema = { type = "object", properties = {  } }
+
+[[plugin.entries]]
 id = "cog_describe_v1"
 name = "认知桥能力清单 v1"
 description = "稳定只读接口（为她所想）：声明 music_perception 的 v1 只读感知能力与当前授权状态；不含正文、不截图、不录音、不发言、不改任何设置。"
@@ -177,6 +183,12 @@ description = "只读已缓存的 Windows 音频会话电平与 PID 标签；标
 input_schema = { type = "object", properties = {  } }
 
 [[plugin.entries]]
+id = "get_current_lyrics_for_ai"
+name = "AI 读取当前歌曲歌词候选"
+description = "只读：返回当前或上一首已经识别到的逐行歌词候选；不启动采集、不触发发言"
+input_schema = { type = "object", properties = { scope = { type = "string", enum = ["current", "previous", "both"] }, max_lines = { type = "integer", minimum = 1, maximum = 40 } } }
+
+[[plugin.entries]]
 id = "get_current_media_for_ai"
 name = "AI 读取当前音乐或视频声音"
 description = "只读，不触发聊天或播放，不允许未授权读取"
@@ -199,12 +211,6 @@ id = "get_live_lyrics"
 name = "歌词面板最近两首歌曲"
 description = "本地 UI 读取最多两首歌的逐行歌词候选和对应时间戳；不触发 AI 发言"
 input_schema = { type = "object", properties = {  } }
-
-[[plugin.entries]]
-id = "get_current_lyrics_for_ai"
-name = "AI 读取当前歌曲歌词候选"
-description = "只读：返回当前或上一首已经识别到的逐行歌词候选；不启动采集、不触发发言"
-input_schema = { type = "object", properties = { scope = { type = "string", enum = ["current", "previous", "both"] }, max_lines = { type = "integer", minimum = 1, maximum = 40 } } }
 
 [[plugin.entries]]
 id = "get_lyrics_diagnostics"
@@ -261,6 +267,12 @@ description = "只安装固定版本 proc-tap Windows wheel 到插件独立目�
 input_schema = { type = "object", properties = { confirmed = { type = "boolean", default = false } } }
 
 [[plugin.entries]]
+id = "install_live2d_bridge"
+name = "为她所听 · 接入主程序角色"
+description = "把律动驱动装进主程序的 index.html 和 static/live2d（会先备份原文件）；Steam 更新后需要重新执行一次"
+input_schema = { type = "object", properties = { app_bin = { type = "string", description = "可选：手动指定 resources/bin" } } }
+
+[[plugin.entries]]
 id = "install_singing_model"
 name = "下载并校验中日英专业歌声模型"
 description = "必须由用户确认；独立虚拟环境、官方权重校验、失败保留旧档位。"
@@ -291,6 +303,78 @@ description = "仅在用户通过面板主动点击后，复用 keyboard_control
 input_schema = { type = "object", properties = { duration = { type = "number", minimum = 1, maximum = 15 } } }
 
 [[plugin.entries]]
+id = "live2d_bridge_status"
+name = "为她所听 · 主程序接入状态"
+description = "查看驱动端口、是否已接入 index.html（只读）"
+input_schema = { type = "object", properties = {  } }
+
+[[plugin.entries]]
+id = "live2d_stage_status"
+name = "为她所听 · 律动页状态"
+description = "查看本地律动页服务是否在运行（只读）"
+input_schema = { type = "object", properties = {  } }
+
+[[plugin.entries]]
+id = "onboarding_browse_cancel"
+name = "为她所听 · 关闭文件夹选择框"
+description = "关闭还没选完的文件夹对话框"
+input_schema = { type = "object", properties = {  } }
+
+[[plugin.entries]]
+id = "onboarding_browse_start"
+name = "为她所听 · 打开文件夹选择框"
+description = "打开系统文件夹对话框选择依赖下载位置（非阻塞）"
+input_schema = { type = "object", properties = { start_path = { type = "string" } } }
+
+[[plugin.entries]]
+id = "onboarding_browse_wait"
+name = "为她所听 · 等待文件夹选择结果"
+description = "等待用户完成文件夹选择，返回选择状态"
+input_schema = { type = "object", properties = { seconds = { type = "number" } } }
+
+[[plugin.entries]]
+id = "onboarding_cancel_install"
+name = "为她所听 · 取消下载"
+description = "取消当前和排队的下载任务"
+input_schema = { type = "object", properties = {  } }
+
+[[plugin.entries]]
+id = "onboarding_finish"
+name = "为她所听 · 完成引导"
+description = "标记新手引导已完成"
+input_schema = { type = "object", properties = {  } }
+
+[[plugin.entries]]
+id = "onboarding_reopen"
+name = "为她所听 · 重新运行引导"
+description = "重新打开新手引导（completed 置为 false）"
+input_schema = { type = "object", properties = {  } }
+
+[[plugin.entries]]
+id = "onboarding_scan"
+name = "为她所听 · 重新检测环境"
+description = "重新扫描运行环境与各模型/组件状态（只读，不下载）"
+input_schema = { type = "object", properties = {  } }
+
+[[plugin.entries]]
+id = "onboarding_set_storage_root"
+name = "为她所听 · 确认安装位置"
+description = "校验并保存依赖下载位置（必须确认）"
+input_schema = { type = "object", properties = { path = { type = "string" }, confirmed = { type = "boolean" } }, required = ["path", "confirmed"] }
+
+[[plugin.entries]]
+id = "onboarding_start_install"
+name = "为她所听 · 开始下载依赖"
+description = "按选择的项开始排队下载（必须已确认位置）"
+input_schema = { type = "object", properties = { items = { type = "array" }, choices = { type = "object" }, confirmed = { type = "boolean" } }, required = ["confirmed"] }
+
+[[plugin.entries]]
+id = "open_live2d_stage"
+name = "为她所听 · 打开音乐律动预览"
+description = "在本机浏览器打开 Live2D 律动页：听歌时模型会按频谱摆动；只监听 127.0.0.1，带随机令牌，30 分钟后自动关闭"
+input_schema = { type = "object", properties = {  } }
+
+[[plugin.entries]]
 id = "pause_plugin"
 name = "暂停为她所听并释放歌词显存"
 description = "用户暂停插件时立即关闭本插件的音频与歌词子进程，释放其CUDA显存；保留授权、已下载模型和最近两首记录"
@@ -319,6 +403,12 @@ id = "recent_two_songs"
 name = "最近两首歌曲"
 description = "只保留两首歌各自的音乐事件摘要"
 input_schema = { type = "object", properties = {  } }
+
+[[plugin.entries]]
+id = "record_playback"
+name = "为她而唱 · 录制当前播放"
+description = "仅供「为她而唱」调用：把当前扬声器回环录成 WAV（默认 48kHz 立体声），同时记录媒体标题时间线，用于按换歌切分"
+input_schema = { type = "object", properties = { duration = { type = "number", minimum = 10, maximum = 600 }, stereo = { type = "boolean", default = true } } }
 
 [[plugin.entries]]
 id = "repair_environment"
@@ -405,6 +495,12 @@ description = "切换前必须停止监听。AI 音色隔离需要 Windows 音�
 input_schema = { type = "object", properties = { output_id = { type = "string", default = "" }, ai_separate = { type = "boolean", default = false }, confirmed = { type = "boolean", default = false } } }
 
 [[plugin.entries]]
+id = "set_commentary"
+name = "为她所听 · 吐槽开关"
+description = "开关音乐吐槽（歌曲风格/音量/节奏变化时她会随口说一句）和视频吐槽（看「为她所控」的窗口画面，或主程序屏幕分享的画面）。开启时会暂停主程序的定时主动搭话，关闭时恢复主人原来的设置。"
+input_schema = { type = "object", properties = { music = { type = "boolean" }, video = { type = "boolean" }, frequency = { type = "string", enum = ["lively", "normal", "rare"] } } }
+
+[[plugin.entries]]
 id = "set_download_source"
 name = "确认后保存模型下载来源优先级"
 description = "仅改变官方/镜像尝试顺序，不下载、不上传音频"
@@ -415,6 +511,12 @@ id = "set_external_channel_share"
 name = "授权另一个插件读取选中应用的结构化声音摘要"
 description = "需经用户确认才更改，默认关闭。仅包含候选文本和事件，不提供原始PCM"
 input_schema = { type = "object", properties = { enabled = { type = "boolean", default = false }, confirmed = { type = "boolean", default = false } } }
+
+[[plugin.entries]]
+id = "set_live2d_groove"
+name = "为她所听 · 开关音乐律动"
+description = "开启/关闭主程序角色的音乐律动（只影响画面，不影响识别）"
+input_schema = { type = "object", properties = { enabled = { type = "boolean" } }, required = ["enabled"] }
 
 [[plugin.entries]]
 id = "set_lyrics_device"
@@ -439,6 +541,12 @@ id = "set_media_source_role"
 name = "标记声音来自音乐、视频或 AI"
 description = "只影响本地二次验证。按 Windows 媒体会话来源 ID 匹配，不能证明实际有声。"
 input_schema = { type = "object", properties = { app = { type = "string", default = "" }, role = { type = "string", default = "unknown" } } }
+
+[[plugin.entries]]
+id = "set_sing_priority"
+name = "唱歌优先：暂停分离与歌词识别"
+description = "唱歌处理期间暂停人声分离和歌词模型以释放显存，录音保持；可先取回当前歌词；处理完恢复"
+input_schema = { type = "object", properties = { enabled = { type = "boolean" }, collect_lyrics = { type = "boolean" } }, required = ["enabled"] }
 
 [[plugin.entries]]
 id = "set_stem_device"
@@ -495,9 +603,21 @@ description = "独立后台下载约67MB官方SHA绑定的UVR ONNX，不上传�
 input_schema = { type = "object", properties = { confirmed = { type = "boolean" }, quality = { type = "string", enum = ["low", "medium", "high", "ultra"] }, download_source = { type = "string", enum = ["mirror", "official"] } }, required = ["confirmed"] }
 
 [[plugin.entries]]
+id = "start_together"
+name = "一起看 / 一起玩"
+description = "开始陪看陪玩（讨论模式）：默认 60 分钟；视频/游戏/音乐任选"
+input_schema = { type = "object", properties = { kind = { type = "string", enum = ["video", "game", "music"] }, minutes = { type = "number", minimum = 5, maximum = 240 } } }
+
+[[plugin.entries]]
 id = "stop_auto_listen"
 name = "停止自动音乐识别"
 description = "停止监听、撤回自动启动授权，丢弃未完成的音频片段"
+input_schema = { type = "object", properties = {  } }
+
+[[plugin.entries]]
+id = "stop_together"
+name = "结束一起看"
+description = "结束陪看陪玩（讨论模式）"
 input_schema = { type = "object", properties = {  } }
 
 [[plugin.entries]]
@@ -513,10 +633,10 @@ description = "旧接口不再触发角色发言；仅将上次分析结果返�
 input_schema = { type = "object", properties = {  } }
 
 [[plugin.entries]]
-id = "record_playback"
-name = "为她而唱 · 录制当前播放"
-description = "仅供「为她而唱」调用：把当前扬声器回环录成 WAV（默认 48kHz 立体声），同时记录媒体标题时间线，用于按换歌切分"
-input_schema = { type = "object", properties = { duration = { type = "number", minimum = 10, maximum = 600 }, stereo = { type = "boolean", default = true } } }
+id = "uninstall_live2d_bridge"
+name = "为她所听 · 撤销主程序接入"
+description = "从 index.html 移除驱动脚本并删除已复制的文件（恢复备份）"
+input_schema = { type = "object", properties = { app_bin = { type = "string" } } }
 
 [[plugin.entries]]
 id = "uninstall_lyrics_model"
