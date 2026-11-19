@@ -9021,7 +9021,7 @@ class MusicPerceptionPlugin(CommentaryMixin, NekoPluginBase):
     # 和 templates/index.html 里实际那一行保持一致；版本号走主程序的 static_asset_version，
     # 这样主程序更新时会自动失效缓存，也不会因为标记对不上被重复插入一次。
     _BRIDGE_TAG = ('<script src="/static/live2d/music-groove-bridge.js'
-                   '?v={{ static_asset_version }}-lips4-g83"></script>')
+                   '?v={{ static_asset_version }}-lips4-g84"></script>')
 
     def _app_bin_dir(self) -> Path | None:
         """Locate the running app's resources/bin (templates + static live there)."""

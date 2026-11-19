@@ -255,6 +255,7 @@ class _BridgeHandler(BaseHTTPRequestHandler):
                               "user_input_at": float(data.get("user_input_at") or 0) / 1000.0,
                               "ai_speaking": bool(data.get("ai_speaking")),
                               "screen_share": bool(data.get("screen_share")),
+                              "away": bool(data.get("away")),
                               "lanlan": str(data.get("lanlan") or "")[:40]})
             answer = {"ok": True, "want_frame": False}
             if self.frame_wanted:

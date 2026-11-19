@@ -781,7 +781,7 @@ export default function WeiTaSuoTing(props:PluginSurfaceProps) {
         {commentary.took_over_official?<Text>主程序的定时主动搭话已暂停，关掉吐槽后会恢复你原来的设置。</Text>:null}
         {commentary.music_on||commentary.video_on?<Text>{commentary.last&&commentary.last.at?
           "上一次："+(commentary.last.kind==="music"?"听歌 · ":commentary.last.kind==="screen"?"屏幕分享 · ":"看视频 · ")+short(commentary.last.what,"",40)
-          :"还没说过"}{commentary.why_not_now==="cooldown"?" · 冷却中":commentary.why_not_now==="user_active"?" · 你刚在聊天，先不打扰":""}</Text>:null}
+          :"还没说过"}{commentary.why_not_now==="cooldown"?" · 冷却中":commentary.why_not_now==="user_active"?" · 你刚在聊天，先不打扰":commentary.why_not_now==="away"?" · 她现在不在（请她离开）":""}</Text>:null}
       </Stack></Card>
       <Text>识别出的文字、节拍和伴奏事件不会直接发送到聊天框；AI 自己决定是否使用与如何表达。开启「吐槽」后，她会在明显变化时主动开口。</Text>
     </>:null}

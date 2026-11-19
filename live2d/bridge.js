@@ -16,7 +16,7 @@
   'use strict';
   var BASE = 'http://127.0.0.1:48765';
   var STATIC = '/static/live2d/';
-  var VERSION = 83;
+  var VERSION = 84;
   // 一执行就上报：用来区分「页面没加载脚本」和「加载了但模块被拦」。
   try {
     fetch(BASE + '/hello?v=' + VERSION + '&stage=boot', { cache: 'no-store' }).catch(function () {});
@@ -3856,6 +3856,8 @@
       user_input_at: Number(window.lastUserInputTime || 0),
       ai_speaking: !!(st.isPlaying || st.assistantSpeechActiveTurnId),
       screen_share: sharing,
+      // 「请她离开」时主程序会把搭话排队、回来后一起补发——吐槽这时不该说
+      away: !!(typeof window.isNekoGoodbyeModeActive === 'function' && window.isNekoGoodbyeModeActive()),
       lanlan: (window.lanlan_config && window.lanlan_config.lanlan_name) || ''
     };
     pageSig.busy = true;

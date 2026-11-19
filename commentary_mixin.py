@@ -134,7 +134,10 @@ class CommentaryMixin:
             return 'paused'
         if getattr(self, '_ai_voice_active', False):
             self._commentary.last_ai_voice_at = time.time()
-        self._commentary_page()
+        sig = self._commentary_page()
+        # 她被「请她离开」时不说：主程序会把消息排队，等她回来一股脑补发，早已过时
+        if sig.get('away') and time.time() - float(sig.get('at') or 0) < 10:
+            return 'away'
         glance = getattr(self, '_glance', None)
         if glance is not None:
             from .glance import mood_refuses
